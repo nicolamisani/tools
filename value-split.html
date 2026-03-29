@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Value Creation &amp; Capture</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background: #f8fafc;
+    color: #1e293b;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  main { flex: 1; padding: 32px 24px; }
+  .container { max-width: 720px; margin: 0 auto; }
+  h1 { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
+  .subtitle { color: #64748b; font-size: 14px; margin-bottom: 28px; }
+
+  /* No-transaction box */
+  .no-transaction {
+    padding: 24px;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    text-align: center;
+    margin-bottom: 32px;
+  }
+  .no-transaction .icon { font-size: 32px; margin-bottom: 12px; }
+  .no-transaction .msg { font-size: 14px; color: #64748b; max-width: 420px; margin: 0 auto; line-height: 1.6; }
+
+  /* Chart area */
+  .chart-area {
+    display: flex;
+    justify-content: center;
+    gap: 56px;
+    margin-bottom: 32px;
+    align-items: center;
+  }
+  .bar-wrapper { text-align: center; }
+  .bar {
+    position: relative;
+    width: 140px;
+    border-radius: 8px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+  }
+  .bar-segment {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 600;
+    transition: height 0.2s;
+  }
+  .bar-segment.cs { background: #3b82f6; }
+  .bar-segment.profit { background: #10b981; }
+  .bar-label { margin-top: 8px; font-size: 13px; font-weight: 600; }
+
+  /* Legend */
+  .legend { display: flex; flex-direction: column; justify-content: center; gap: 20px; }
+  .legend-item { display: flex; align-items: center; gap: 10px; }
+  .legend-swatch { width: 16px; height: 16px; border-radius: 4px; flex-shrink: 0; }
+  .legend-title { font-size: 14px; font-weight: 600; }
+  .legend-formula { font-size: 13px; color: #64748b; }
+  .legend-total { border-top: 1px solid #e2e8f0; padding-top: 12px; }
+
+  /* Sliders */
+  .sliders {
+    background: #fff;
+    border-radius: 12px;
+    border: 1px solid #e2e8f0;
+    padding: 24px 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+  .slider-row label { display: flex; justify-content: space-between; margin-bottom: 6px; }
+  .slider-row label span:first-child { font-size: 14px; font-weight: 600; }
+  .slider-row label .val { font-size: 14px; font-weight: 700; }
+  .slider-row input[type="range"] { width: 100%; cursor: pointer; }
+  .reset-btn {
+    align-self: flex-end;
+    padding: 6px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #64748b;
+    background: none;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  .reset-btn:hover { background: #f1f5f9; }
+
+  /* Footer */
+  footer {
+    text-align: center;
+    padding: 20px 24px;
+    font-size: 13px;
+    color: #94a3b8;
+    border-top: 1px solid #e2e8f0;
+  }
+</style>
+</head>
+<body>
+
+<main>
+  <div class="container">
+    <h1>Value Creation &amp; Capture</h1>
+    <p class="subtitle">Drag the sliders to see how value splits between the consumer and the firm.</p>
+
+    <div id="display"></div>
+
+    <div class="sliders">
+      <div class="slider-row">
+        <label><span>Willingness to Pay</span><span class="val" id="wtp-val" style="color:#1e293b">$100</span></label>
+        <input type="range" id="wtp" min="0" max="150" value="100" style="accent-color:#1e293b">
+      </div>
+      <div class="slider-row">
+        <label><span>Price</span><span class="val" id="price-val" style="color:#f59e0b">$65</span></label>
+        <input type="range" id="price" min="0" max="150" value="65" style="accent-color:#f59e0b">
+      </div>
+      <div class="slider-row">
+        <label><span>Cost</span><span class="val" id="cost-val" style="color:#ef4444">$30</span></label>
+        <input type="range" id="cost" min="0" max="150" value="30" style="accent-color:#ef4444">
+      </div>
+      <button class="reset-btn" id="reset">Reset</button>
+    </div>
+  </div>
+</main>
+
+<footer>30402 Principles of Management &mdash; Week 06 Strategic Positioning for Competitive Advantage</footer>
+
+<script>
+  const wtpEl = document.getElementById('wtp');
+  const priceEl = document.getElementById('price');
+  const costEl = document.getElementById('cost');
+  const display = document.getElementById('display');
+
+  const BAR_MAX = 150;
+  const BAR_H = 340;
+  const toH = v => (v / BAR_MAX) * BAR_H;
+
+  function update() {
+    const wtp = +wtpEl.value;
+    const price = +priceEl.value;
+    const cost = +costEl.value;
+
+    document.getElementById('wtp-val').textContent = '$' + wtp;
+    document.getElementById('price-val').textContent = '$' + price;
+    document.getElementById('cost-val').textContent = '$' + cost;
+
+    const noTx = price > wtp || cost > price;
+
+    if (noTx) {
+      const msg = price > wtp
+        ? `The price ($${price}) exceeds what the consumer is willing to pay ($${wtp}), so they won't buy.`
+        : `The cost ($${cost}) exceeds the price ($${price}), so the firm would lose money on every unit. No rational firm would produce this product.`;
+      display.innerHTML = `
+        <div class="no-transaction">
+          <div class="icon">No Transaction</div>
+          <div class="msg">${msg}</div>
+        </div>`;
+      return;
+    }
+
+    const cs = wtp - price;
+    const profit = price - cost;
+    const total = wtp - cost;
+
+    display.innerHTML = `
+      <div class="chart-area">
+        <div class="bar-wrapper">
+          <div class="bar">
+            <div class="bar-segment cs" style="height:${toH(cs)}px">${cs >= 8 ? '$' + cs : ''}</div>
+            <div class="bar-segment profit" style="height:${toH(profit)}px">${profit >= 8 ? '$' + profit : ''}</div>
+          </div>
+          <div class="bar-label">Value Created: $${total}</div>
+        </div>
+        <div class="legend">
+          <div class="legend-item">
+            <div class="legend-swatch" style="background:#3b82f6"></div>
+            <div>
+              <div class="legend-title">Consumer Surplus</div>
+              <div class="legend-formula">WTP &minus; Price = $${wtp} &minus; $${price} = $${cs}</div>
+            </div>
+          </div>
+          <div class="legend-item">
+            <div class="legend-swatch" style="background:#10b981"></div>
+            <div>
+              <div class="legend-title">Firm Profit</div>
+              <div class="legend-formula">Price &minus; Cost = $${price} &minus; $${cost} = $${profit}</div>
+            </div>
+          </div>
+          <div class="legend-item legend-total">
+            <div class="legend-swatch" style="background:linear-gradient(to bottom,#3b82f6,#10b981)"></div>
+            <div>
+              <div class="legend-title">Total Value</div>
+              <div class="legend-formula">WTP &minus; Cost = $${wtp} &minus; $${cost} = $${total}</div>
+            </div>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  wtpEl.addEventListener('input', update);
+  priceEl.addEventListener('input', update);
+  costEl.addEventListener('input', update);
+  document.getElementById('reset').addEventListener('click', () => {
+    wtpEl.value = 100; priceEl.value = 65; costEl.value = 30;
+    update();
+  });
+
+  update();
+</script>
+</body>
+</html>
