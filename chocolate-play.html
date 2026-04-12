@@ -1,0 +1,1860 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chocolate Bar Challenge — Player</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;0,9..144,700;0,9..144,800;1,9..144,500&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+
+<style>
+  /* ── Reset ──────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  /* ── Game CSS (from original) ──────────────── */
+  body {
+    font-family: 'Nunito', system-ui, -apple-system, sans-serif;
+    background:
+      radial-gradient(circle at top left, #f7eed6 0%, #f4ead2 45%, #ecdfbf 100%);
+    color: #2b0a06;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  main { flex: 1; padding: 28px 24px; }
+  .container { max-width: 1100px; margin: 0 auto; }
+  h1 {
+    font-family: 'Fraunces', 'Georgia', serif;
+    font-size: 28px;
+    font-weight: 700;
+    margin-bottom: 6px;
+    color: #2b0a06;
+    letter-spacing: -0.01em;
+    font-optical-sizing: auto;
+  }
+  h1 .emoji { font-size: 26px; margin-right: 6px; vertical-align: -2px; }
+  .choco-bar {
+    display: flex;
+    gap: 3px;
+    margin: 6px 0 14px;
+  }
+  .choco-bar span {
+    width: 22px;
+    height: 10px;
+    border-radius: 2px;
+    background: linear-gradient(180deg, #6b4524 0%, #4a2e16 60%, #2b0a06 100%);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.18), inset 0 -1px 0 rgba(0,0,0,0.25);
+  }
+  .subtitle { color: #6b4524; font-size: 14px; margin-bottom: 20px; line-height: 1.55; }
+  .subtitle strong { color: #2b0a06; }
+
+  .game-grid {
+    display: grid;
+    grid-template-columns: 1.25fr 1fr;
+    gap: 18px;
+    margin-bottom: 18px;
+  }
+  @media (max-width: 880px) { .game-grid { grid-template-columns: 1fr; } }
+
+  .card {
+    background: #fffaf0;
+    border: 1px solid #e6d7b8;
+    border-radius: 12px;
+    padding: 18px 20px;
+    box-shadow: 0 1px 0 rgba(43, 10, 6, 0.04);
+  }
+  .card h3 {
+    font-family: 'Fraunces', 'Georgia', serif;
+    font-size: 14px;
+    font-weight: 600;
+    color: #6b4524;
+    letter-spacing: 0.01em;
+    margin-bottom: 12px;
+  }
+  .card h3 .emoji { margin-right: 4px; }
+
+  .chart-svg { display: block; width: 100%; height: auto; }
+
+  .legend { display: flex; gap: 14px; margin-top: 8px; font-size: 11px; flex-wrap: wrap; }
+  .legend .item { display: flex; align-items: center; gap: 6px; color: #6b4524; }
+  .legend .sw { width: 12px; height: 12px; border-radius: 2px; }
+
+  /* ── Stats table ──────────────── */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    gap: 6px 18px;
+    font-size: 13px;
+    align-items: center;
+  }
+  .stats-grid .col-head {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #8c4a46;
+    text-align: right;
+    padding-bottom: 4px;
+    border-bottom: 1px solid #e6d7b8;
+  }
+  .stats-grid .label { color: #6b4524; }
+  .stats-grid .val {
+    font-weight: 700;
+    color: #2b0a06;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  .stats-grid .val.muted { color: #c8b89a; }
+  .stats-grid .brand-line {
+    grid-column: 1 / -1;
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    color: #6b4524;
+    padding: 3px 0 0;
+  }
+  .stats-grid .brand-line .name {
+    font-weight: 700;
+    color: #8c4a46;
+    font-style: italic;
+  }
+  .profit-row {
+    grid-column: 1 / -1;
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding-top: 12px;
+    margin-top: 6px;
+    border-top: 1px dashed #e6d7b8;
+  }
+  .profit-row .label { font-weight: 600; color: #6b4524; font-size: 13px; }
+  .profit-row .val {
+    font-size: 22px;
+    color: #6b4524;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+  }
+  .profit-row .val.negative { color: #8c4a46; }
+
+  /* ── Recipe card ──────────────── */
+  .recipe-card {
+    background: #fffaf0;
+    border: 1px solid #e6d7b8;
+    border-radius: 12px;
+    padding: 18px 20px 16px;
+    margin-bottom: 12px;
+    box-shadow: 0 1px 0 rgba(43, 10, 6, 0.04);
+    position: relative;
+    overflow: hidden;
+  }
+  .recipe-card::before {
+    content: "";
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 4px;
+    background:
+      linear-gradient(90deg,
+        #6b4524 0%, #2b0a06 20%, #6b4524 25%,
+        #2b0a06 45%, #6b4524 50%, #2b0a06 70%,
+        #6b4524 75%, #2b0a06 95%, #6b4524 100%);
+  }
+  .recipe-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 10px;
+  }
+  .recipe-head h4 {
+    font-family: 'Fraunces', 'Georgia', serif;
+    font-size: 17px;
+    font-weight: 600;
+    color: #2b0a06;
+  }
+  .recipe-head .budget {
+    font-size: 10px;
+    color: #8c4a46;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+  }
+  .recipe-note {
+    font-size: 11px;
+    color: #6b4524;
+    line-height: 1.45;
+    margin-bottom: 12px;
+  }
+  .recipe-options {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px 18px;
+    margin-bottom: 14px;
+  }
+  @media (max-width: 720px) {
+    .recipe-options { grid-template-columns: 1fr; }
+  }
+  .recipe-options label {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+    color: #2b0a06;
+    cursor: pointer;
+    padding: 4px 0;
+    user-select: none;
+  }
+  .recipe-options input[type="checkbox"] {
+    width: 16px; height: 16px;
+    accent-color: #6b4524;
+    cursor: pointer;
+  }
+  .recipe-options .opt-name { flex: 1; }
+  .recipe-options .opt-effect {
+    font-size: 11px;
+    color: #8c4a46;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .recipe-commit {
+    display: flex;
+    justify-content: flex-end;
+  }
+  .recipe-commit button {
+    padding: 8px 14px;
+    background: #6b4524;
+    color: #f4ead2;
+    border: none;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .recipe-commit button:hover:not(:disabled) { background: #8c5a30; }
+  .recipe-commit button:disabled { background: #e6d7b8; color: #b8a88e; cursor: not-allowed; }
+
+  /* ── Small action cards row ──────────────── */
+  .actions {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+  @media (max-width: 880px) { .actions { grid-template-columns: 1fr 1fr; } }
+
+  .action-card {
+    background: #fffaf0;
+    border: 1px solid #e6d7b8;
+    border-radius: 12px;
+    padding: 14px 14px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    box-shadow: 0 1px 0 rgba(43, 10, 6, 0.04);
+  }
+  .action-card h4 {
+    font-family: 'Fraunces', 'Georgia', serif;
+    font-size: 16px;
+    font-weight: 600;
+    color: #2b0a06;
+  }
+  .action-card h4 .emoji { margin-right: 4px; }
+  .budget {
+    font-size: 10px;
+    color: #8c4a46;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+  }
+  .budget.depleted { color: #c8b89a; }
+  .action-card .hint-text {
+    font-size: 11px;
+    color: #6b4524;
+    line-height: 1.45;
+  }
+  .action-card .brand-feedback {
+    font-size: 11px;
+    color: #8c4a46;
+    line-height: 1.45;
+    font-style: italic;
+    min-height: 28px;
+  }
+  .action-card input,
+  .action-card select {
+    width: 100%;
+    padding: 7px 9px;
+    border: 1px solid #e6d7b8;
+    border-radius: 6px;
+    font-size: 12px;
+    font-family: inherit;
+    color: #2b0a06;
+    background: #fffaf0;
+  }
+  .action-card input[type="number"] { font-variant-numeric: tabular-nums; }
+  .action-card input:focus, .action-card select:focus { outline: none; border-color: #8c4a46; }
+  .action-card button {
+    padding: 8px 10px;
+    background: #6b4524;
+    color: #f4ead2;
+    border: none;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+    margin-top: auto;
+  }
+  .action-card button:hover:not(:disabled) { background: #8c5a30; }
+  .action-card button:disabled { background: #e6d7b8; color: #b8a88e; cursor: not-allowed; }
+
+  .finalize-bar {
+    display: flex;
+    justify-content: center;
+    margin: 10px 0 22px;
+  }
+  .finalize-bar button {
+    font-family: 'Fraunces', 'Georgia', serif;
+    padding: 16px 44px;
+    background: linear-gradient(180deg, #a85a54 0%, #8c4a46 100%);
+    color: #f4ead2;
+    border: 2px solid #2b0a06;
+    border-radius: 12px;
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    cursor: pointer;
+    box-shadow: 0 4px 14px rgba(43, 10, 6, 0.28), inset 0 1px 0 rgba(255,255,255,0.25);
+    transition: transform 0.1s ease, box-shadow 0.15s ease, filter 0.15s ease;
+  }
+  .finalize-bar button:hover:not(:disabled) {
+    filter: brightness(1.08);
+    box-shadow: 0 6px 18px rgba(43, 10, 6, 0.38), inset 0 1px 0 rgba(255,255,255,0.3);
+    transform: translateY(-1px);
+  }
+  .finalize-bar button:active:not(:disabled) {
+    transform: translateY(1px);
+    box-shadow: 0 2px 8px rgba(43, 10, 6, 0.28), inset 0 1px 0 rgba(255,255,255,0.2);
+  }
+  .finalize-bar button:disabled {
+    background: #e6d7b8;
+    color: #b8a88e;
+    border-color: #d5c29c;
+    box-shadow: none;
+    cursor: not-allowed;
+  }
+
+  /* ── Confirmation modal ──────────────── */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(43, 10, 6, 0.55);
+    backdrop-filter: blur(2px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    animation: modal-fade 0.18s ease-out;
+  }
+  @keyframes modal-fade {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+  .modal {
+    background: #f4ead2;
+    border: 1px solid #e6d7b8;
+    border-radius: 14px;
+    padding: 26px 28px 22px;
+    max-width: 440px;
+    width: calc(100% - 32px);
+    box-shadow: 0 20px 50px rgba(43, 10, 6, 0.35);
+    text-align: center;
+    animation: modal-pop 0.22s ease-out;
+  }
+  @keyframes modal-pop {
+    from { opacity: 0; transform: translateY(-6px) scale(0.98); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+  }
+  .modal h3 {
+    font-family: 'Fraunces', 'Georgia', serif;
+    font-size: 20px;
+    font-weight: 700;
+    color: #2b0a06;
+    margin-bottom: 10px;
+  }
+  .modal p {
+    font-size: 14px;
+    color: #6b4524;
+    line-height: 1.55;
+    margin-bottom: 20px;
+  }
+  .modal-buttons {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+  }
+  .modal-buttons button {
+    font-family: inherit;
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    border: none;
+  }
+  .modal-buttons .cancel {
+    background: #fffaf0;
+    color: #6b4524;
+    border: 1px solid #e6d7b8;
+  }
+  .modal-buttons .cancel:hover { background: #f7eed6; }
+  .modal-buttons .confirm {
+    background: linear-gradient(180deg, #a85a54 0%, #8c4a46 100%);
+    color: #f4ead2;
+    border: 2px solid #2b0a06;
+  }
+  .modal-buttons .confirm:hover { filter: brightness(1.08); }
+
+  .consultant {
+    background: #f4ead2;
+    border: 1px solid #e6d7b8;
+    border-radius: 12px;
+    padding: 16px 22px;
+    margin-bottom: 18px;
+    line-height: 1.6;
+  }
+  .consultant.empty { display: none; }
+  .consultant .who {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: #8c4a46;
+    margin-bottom: 6px;
+  }
+  .consultant blockquote {
+    font-style: italic;
+    color: #2b0a06;
+    font-size: 14px;
+    border-left: 3px solid #8c4a46;
+    padding-left: 14px;
+  }
+
+  .history {
+    background: #fffaf0;
+    border: 1px solid #e6d7b8;
+    border-radius: 12px;
+    padding: 16px 20px;
+    margin-bottom: 18px;
+    box-shadow: 0 1px 0 rgba(43, 10, 6, 0.04);
+  }
+  .history h3 {
+    font-family: 'Fraunces', 'Georgia', serif;
+    font-size: 14px;
+    font-weight: 600;
+    color: #6b4524;
+    letter-spacing: 0.01em;
+    margin-bottom: 8px;
+  }
+  .history h3 .emoji { margin-right: 4px; }
+  .history ol {
+    list-style: none;
+    padding: 0;
+    font-size: 12px;
+    color: #2b0a06;
+    max-height: 200px;
+    overflow-y: auto;
+  }
+  .history li {
+    padding: 5px 0;
+    display: flex;
+    gap: 12px;
+    align-items: baseline;
+    border-bottom: 1px solid #f0e4c7;
+  }
+  .history li:last-child { border-bottom: none; }
+  .history .empty-row { justify-content: center; color: #b8a88e; font-style: italic; }
+  .history .move-num { color: #8c4a46; font-weight: 700; width: 28px; }
+  .history .move-desc { flex: 1; }
+  .history .move-profit {
+    font-weight: 700;
+    color: #6b4524;
+    font-variant-numeric: tabular-nums;
+  }
+  .history .move-profit.muted { color: #b8a88e; font-weight: 500; font-style: italic; }
+
+  .final-screen {
+    background: #f4ead2;
+    border: 2px solid #8c4a46;
+    border-radius: 14px;
+    padding: 26px 24px 24px;
+    margin-bottom: 22px;
+    text-align: center;
+    box-shadow: 0 4px 18px rgba(43, 10, 6, 0.14);
+    animation: final-reveal 0.4s ease-out;
+  }
+  @keyframes final-reveal {
+    from { opacity: 0; transform: translateY(-8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .final-screen h2 {
+    font-family: 'Fraunces', 'Georgia', serif;
+    font-size: 24px;
+    font-weight: 700;
+    color: #2b0a06;
+    margin-bottom: 6px;
+  }
+  .final-screen .final-profit {
+    font-size: 40px;
+    font-weight: 800;
+    color: #6b4524;
+    margin: 6px 0 10px;
+    font-variant-numeric: tabular-nums;
+  }
+  .final-screen .final-profit.negative { color: #8c4a46; }
+  .final-screen .sub { font-size: 13px; color: #6b4524; line-height: 1.55; }
+  .final-screen .sub + .sub { margin-top: 6px; }
+
+  footer {
+    text-align: center;
+    padding: 20px 24px;
+    font-size: 13px;
+    color: #8c4a46;
+    border-top: 1px solid #e6d7b8;
+  }
+
+  .firm-label { font-size: 11px; fill: #6b4524; font-weight: 600; font-family: inherit; }
+  .ax-tick { stroke: #e6d7b8; stroke-width: 1; }
+
+  /* ── Multiplayer screens ──────────────── */
+
+  .mp-screen { display: none; flex-direction: column; min-height: 100vh; }
+  .mp-screen.active { display: flex; }
+
+  /* Hide game body bg when on join/waiting/final screens */
+  body.mp-join { background: #6b4524; }
+  body.mp-waiting {
+    background: radial-gradient(circle at top left, #fffaf0 0%, #f7eed6 50%, #f4ead2 100%);
+  }
+  body.mp-final {
+    background: radial-gradient(circle at top left, #fffaf0 0%, #f7eed6 50%, #f4ead2 100%);
+  }
+
+  /* ── Join screen ──────────────── */
+  #screen-join {
+    align-items: center;
+    justify-content: center;
+    padding: 32px 20px;
+    text-align: center;
+  }
+  .join-box {
+    max-width: 400px;
+    width: 100%;
+  }
+  .join-title {
+    font-family: 'Fraunces', 'Georgia', serif;
+    font-size: 32px;
+    font-weight: 800;
+    color: #f4ead2;
+    margin-bottom: 8px;
+    line-height: 1.2;
+  }
+  .join-subtitle {
+    font-size: 15px;
+    color: #d4a24a;
+    margin-bottom: 28px;
+    line-height: 1.4;
+  }
+  .join-field {
+    width: 100%;
+    padding: 14px 16px;
+    border: 2px solid #d4a24a;
+    border-radius: 10px;
+    font-size: 16px;
+    font-family: inherit;
+    background: #fffaf0;
+    color: #2b0a06;
+    text-align: center;
+    margin-bottom: 14px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .join-field:focus {
+    border-color: #f4ead2;
+  }
+  .join-field.pin-input {
+    font-size: 36px;
+    font-weight: 800;
+    font-family: 'Courier New', monospace;
+    letter-spacing: 0.3em;
+    padding: 16px;
+  }
+  .join-field::placeholder {
+    color: #b8a88e;
+    font-weight: 400;
+    letter-spacing: 0;
+    font-size: 16px;
+  }
+  .join-error {
+    color: #ffc1bd;
+    font-size: 13px;
+    font-weight: 600;
+    min-height: 20px;
+    margin-bottom: 10px;
+  }
+  .join-btn {
+    width: 100%;
+    padding: 14px;
+    background: #d4a24a;
+    color: #2b0a06;
+    border: none;
+    border-radius: 10px;
+    font-size: 17px;
+    font-weight: 800;
+    font-family: inherit;
+    cursor: pointer;
+    transition: background 0.15s, transform 0.1s;
+  }
+  .join-btn:hover { background: #e0b35c; }
+  .join-btn:active { transform: scale(0.98); }
+  .join-btn:disabled { background: #8c5a30; color: #4a2e16; cursor: not-allowed; }
+
+  /* ── Waiting screen ──────────────── */
+  #screen-waiting {
+    align-items: center;
+    justify-content: center;
+    padding: 32px 20px;
+    text-align: center;
+  }
+  .waiting-emoji {
+    font-size: 72px;
+    animation: waiting-pulse 1.8s ease-in-out infinite;
+    margin-bottom: 16px;
+  }
+  @keyframes waiting-pulse {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.12); opacity: 0.85; }
+  }
+  .waiting-title {
+    font-family: 'Fraunces', 'Georgia', serif;
+    font-size: 28px;
+    font-weight: 700;
+    color: #2b0a06;
+    margin-bottom: 8px;
+  }
+  .waiting-pin {
+    font-size: 14px;
+    color: #6b4524;
+    margin-bottom: 8px;
+  }
+  .waiting-pin strong {
+    font-family: 'Courier New', monospace;
+    font-size: 18px;
+    color: #2b0a06;
+    letter-spacing: 0.15em;
+  }
+  .waiting-msg {
+    font-size: 15px;
+    color: #8c4a46;
+    font-style: italic;
+  }
+
+  /* ── Timer bar ──────────────── */
+  .timer-bar {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    background: #2b0a06;
+    color: #f4ead2;
+    padding: 10px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 14px;
+    font-weight: 700;
+    transition: background 0.3s;
+  }
+  .timer-bar.urgent {
+    background: #c44536;
+    animation: timer-pulse 1s ease-in-out infinite;
+  }
+  @keyframes timer-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.82; }
+  }
+  .timer-bar .timer-name {
+    font-weight: 600;
+    font-size: 13px;
+    opacity: 0.9;
+  }
+  .timer-bar .timer-countdown {
+    font-family: 'Courier New', monospace;
+    font-size: 20px;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+  }
+
+  /* ── Final multiplayer screen ──────────────── */
+  #screen-final {
+    align-items: center;
+    justify-content: center;
+    padding: 32px 20px;
+    text-align: center;
+  }
+  .mp-final-box {
+    max-width: 480px;
+    width: 100%;
+  }
+  .mp-final-emoji {
+    font-size: 56px;
+    margin-bottom: 10px;
+  }
+  .mp-final-title {
+    font-family: 'Fraunces', 'Georgia', serif;
+    font-size: 30px;
+    font-weight: 800;
+    color: #2b0a06;
+    margin-bottom: 10px;
+  }
+  .mp-final-profit {
+    font-size: 44px;
+    font-weight: 800;
+    color: #6b4524;
+    font-variant-numeric: tabular-nums;
+    margin-bottom: 6px;
+  }
+  .mp-final-profit.negative { color: #8c4a46; }
+  .mp-final-rank {
+    font-size: 20px;
+    color: #2b0a06;
+    font-weight: 700;
+    margin-bottom: 24px;
+  }
+  .mp-podium {
+    background: #fffaf0;
+    border: 1px solid #e6d7b8;
+    border-radius: 12px;
+    padding: 16px 20px;
+    text-align: left;
+  }
+  .mp-podium h4 {
+    font-family: 'Fraunces', 'Georgia', serif;
+    font-size: 15px;
+    font-weight: 700;
+    color: #6b4524;
+    margin-bottom: 10px;
+    text-align: center;
+  }
+  .mp-podium-entry {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 0;
+    border-bottom: 1px solid #f0e4c7;
+    font-size: 14px;
+  }
+  .mp-podium-entry:last-child { border-bottom: none; }
+  .mp-podium-medal {
+    font-size: 22px;
+    width: 32px;
+    text-align: center;
+    flex-shrink: 0;
+  }
+  .mp-podium-name {
+    flex: 1;
+    font-weight: 700;
+    color: #2b0a06;
+  }
+  .mp-podium-name.is-you {
+    color: #8c4a46;
+  }
+  .mp-podium-profit {
+    font-weight: 700;
+    color: #6b4524;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ── Confetti ──────────────── */
+  .confetti-container {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 200;
+    overflow: hidden;
+  }
+  .confetti-piece {
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    top: -10px;
+    animation: confetti-fall linear forwards;
+  }
+  @keyframes confetti-fall {
+    0% { transform: translateY(0) rotate(0deg); opacity: 1; }
+    100% { transform: translateY(110vh) rotate(720deg); opacity: 0; }
+  }
+</style>
+</head>
+<body class="mp-join">
+
+<!-- ── Screen 1: Join ──────────────── -->
+<div id="screen-join" class="mp-screen active">
+  <div class="join-box">
+    <div class="join-title">&#127851; The Chocolate Bar Challenge</div>
+    <div class="join-subtitle">Enter the game PIN shown on screen</div>
+    <input type="text" id="input-pin" class="join-field pin-input" inputmode="numeric" maxlength="4" placeholder="PIN" autocomplete="off">
+    <input type="text" id="input-nickname" class="join-field" maxlength="20" placeholder="Your nickname" autocomplete="off">
+    <div class="join-error" id="join-error">&nbsp;</div>
+    <button class="join-btn" id="btn-join">Join Game</button>
+  </div>
+</div>
+
+<!-- ── Screen 2: Waiting ──────────────── -->
+<div id="screen-waiting" class="mp-screen">
+  <div class="waiting-emoji">&#127851;</div>
+  <div class="waiting-title">You're in!</div>
+  <div class="waiting-pin">Game PIN: <strong id="waiting-pin-display"></strong></div>
+  <div class="waiting-msg">Waiting for the host to start...</div>
+</div>
+
+<!-- ── Screen 3: Game ──────────────── -->
+<div id="screen-game" class="mp-screen">
+  <div class="timer-bar" id="timer-bar">
+    <span class="timer-name" id="timer-name"></span>
+    <span class="timer-countdown" id="timer-countdown">--:--</span>
+  </div>
+  <main>
+    <div class="container">
+      <h1><span class="emoji">&#127851;</span>The Chocolate Bar Challenge</h1>
+      <div class="choco-bar" aria-hidden="true">
+        <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+      </div>
+      <p class="subtitle">
+        You are launching a new chocolate bar in a market of <strong>1&nbsp;million bars per year</strong>, against an established rival whose standard bar offers a willingness-to-pay of <strong>100&cent;</strong> at a unit cost of <strong>60&cent;</strong> and a shelf price of <strong>60&cent;</strong> (zero economic profit, 50&nbsp;% starting share). You have four levers: pick <strong>recipe upgrades</strong>, decide on an <strong>efficiency cost cut</strong> that trades some benefit for lower cost, <strong>name your brand</strong> (a clever name gives a small extra benefit bump), and set your <strong>shelf price</strong>. A panel of <strong>consultants</strong> is on hand if you'd like a second opinion along the way.
+      </p>
+      <p class="subtitle" style="margin-top:-10px;">
+        Budgets: <strong>5 recipe revisions</strong>, <strong>5 cost cuts</strong>, <strong>5 brand names</strong>, <strong>5 price changes</strong>, <strong>5 consultant briefings</strong>. Stop whenever you like by hitting <strong>Finalize</strong>. Your score is the profit at your final position.
+      </p>
+
+      <div id="final-screen-slot"></div>
+
+      <div class="game-grid">
+        <div class="card">
+          <h3><span class="emoji">&#128202;</span>Value Sticks</h3>
+          <svg class="chart-svg" viewBox="0 0 440 320" id="chart"></svg>
+          <div class="legend">
+            <div class="item"><div class="sw" style="background:#ffc1bd"></div>Consumer Surplus</div>
+            <div class="item"><div class="sw" style="background:#d4a24a"></div>Your Profit</div>
+            <div class="item"><div class="sw" style="background:#c44536"></div>Loss (P &lt; C)</div>
+            <div class="item"><div class="sw" style="background:#2b0a06"></div>Cost</div>
+          </div>
+        </div>
+        <div class="card">
+          <h3><span class="emoji">&#127851;</span>Current State</h3>
+          <div class="stats-grid" id="stats-grid"></div>
+        </div>
+      </div>
+
+      <div class="recipe-card">
+        <div class="recipe-head">
+          <h4><span class="emoji">&#129379;</span>Recipe upgrades</h4>
+          <div class="budget" id="budget-recipe">5 / 5 revisions left</div>
+        </div>
+        <div class="recipe-note">
+          Tick any combination of upgrades, then hit <strong>Commit recipe</strong>. Each commit counts as one revision, no matter how many boxes you change.
+        </div>
+        <div class="recipe-options" id="recipe-options"></div>
+        <div class="recipe-commit">
+          <button id="btn-recipe">Commit recipe</button>
+        </div>
+      </div>
+
+      <div class="actions">
+        <div class="action-card">
+          <h4><span class="emoji">&#127991;&#65039;</span>Set shelf price</h4>
+          <div class="budget" id="budget-price">5 / 5 left</div>
+          <input type="number" id="input-price" step="1" min="0" max="150" value="60">
+          <button id="btn-price">Commit price</button>
+        </div>
+        <div class="action-card">
+          <h4><span class="emoji">&#9986;&#65039;</span>Cut costs</h4>
+          <div class="budget" id="budget-costcut">5 / 5 left</div>
+          <select id="input-costcut">
+            <option value="0">No cut (baseline)</option>
+            <option value="5">&minus;5 % cost &middot; &minus;2.5 % benefit</option>
+            <option value="10">&minus;10 % cost &middot; &minus;5 % benefit</option>
+            <option value="15">&minus;15 % cost &middot; &minus;7.5 % benefit</option>
+            <option value="20">&minus;20 % cost &middot; &minus;10 % benefit</option>
+            <option value="25">&minus;25 % cost &middot; &minus;12.5 % benefit</option>
+            <option value="30">&minus;30 % cost &middot; &minus;15 % benefit</option>
+          </select>
+          <button id="btn-costcut">Commit cost cut</button>
+        </div>
+        <div class="action-card">
+          <h4><span class="emoji">&#10024;</span>Name your brand</h4>
+          <div class="budget" id="budget-brand">5 / 5 left</div>
+          <input type="text" id="input-brand" maxlength="40" placeholder="Your brand name">
+          <div class="brand-feedback" id="brand-feedback">&nbsp;</div>
+          <button id="btn-brand">Commit name</button>
+        </div>
+        <div class="action-card">
+          <h4><span class="emoji">&#128188;</span>Brief a consultant</h4>
+          <div class="budget" id="budget-hint">5 / 5 left</div>
+          <div class="hint-text">Returns a short memo from a chocolate-industry advisor.</div>
+          <button id="btn-hint">Request briefing</button>
+        </div>
+      </div>
+
+      <div class="finalize-bar">
+        <button id="btn-finalize">&#127942; Finalize &amp; lock in profit</button>
+      </div>
+
+      <div id="confirm-overlay" class="modal-overlay" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
+        <div class="modal">
+          <h3 id="confirm-title">Lock in your profit?</h3>
+          <p>
+            This will end the game and freeze your final score. Any unused revisions, cost cuts, price changes, brand names, or consultant briefings will be forfeited.
+          </p>
+          <div class="modal-buttons">
+            <button type="button" class="cancel" id="btn-cancel-finalize">Go back</button>
+            <button type="button" class="confirm" id="btn-confirm-finalize">Yes, lock it in</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="consultant empty" id="consultant">
+        <div class="who" id="consultant-who"></div>
+        <blockquote id="consultant-text"></blockquote>
+      </div>
+
+      <div class="history">
+        <h3><span class="emoji">&#128221;</span>History</h3>
+        <ol id="history-list"></ol>
+      </div>
+    </div>
+  </main>
+  <footer>30402 Principles of Management &mdash; Week 07 Strategic Positioning for Competitive Advantage</footer>
+</div>
+
+<!-- ── Screen 4: Final ──────────────── -->
+<div id="screen-final" class="mp-screen">
+  <div class="mp-final-box">
+    <div class="mp-final-emoji">&#127851;</div>
+    <div class="mp-final-title">Game Over!</div>
+    <div class="mp-final-profit" id="mp-final-profit"></div>
+    <div class="mp-final-rank" id="mp-final-rank"></div>
+    <div class="mp-podium" id="mp-podium">
+      <h4>&#127942; Leaderboard</h4>
+      <div id="mp-podium-list"></div>
+    </div>
+  </div>
+  <div class="confetti-container" id="confetti-container"></div>
+</div>
+
+<script>
+  // =================================================================
+  // Firebase init
+  // =================================================================
+  const firebaseConfig = {
+    apiKey: "AIzaSyBzUUbUZKt82UYaPOCR8SE8cgIlBCdG-MU",
+    authDomain: "chocolate-bar-game.firebaseapp.com",
+    databaseURL: "https://chocolate-bar-game-default-rtdb.europe-west1.firebasedatabase.app",
+    projectId: "chocolate-bar-game",
+    storageBucket: "chocolate-bar-game.firebasestorage.app",
+    messagingSenderId: "564004953428",
+    appId: "1:564004953428:web:087520f1ac16c236f5bcc1"
+  };
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.database();
+
+  // =================================================================
+  // Multiplayer state
+  // =================================================================
+  let roomCode = null;
+  let playerId = null;
+  let playerName = '';
+  let roomListener = null;
+  let timerInterval = null;
+  let gameStarted = false;
+
+  // =================================================================
+  // Recipe upgrade catalogue (transparent, shown to the player)
+  // =================================================================
+  const UPGRADES = [
+    { key: 'cocoa',   name: 'Finer cocoa blend',            benefit: 5, cost: 3 },
+    { key: 'conch',   name: 'Artisan conching (smoother)',  benefit: 4, cost: 2 },
+    { key: 'origin',  name: 'Single-origin beans',          benefit: 3, cost: 5 },
+    { key: 'nuts',    name: 'Hazelnut &amp; almond inclusions', benefit: 2, cost: 4 },
+    { key: 'organic', name: 'Organic certification',        benefit: 2, cost: 5 }
+  ];
+
+  // =================================================================
+  // Hidden model
+  // =================================================================
+  const RIVAL = { benefit: 100, cost: 60, price: 60 };
+  const EPSILON = 0.20;
+  const BENEFIT_PENALTY_RATIO = 0.5;
+  const MARKET_SIZE = 1000000;
+
+  function hiddenShare(benefit, price) {
+    const csGap = (benefit - price) - (RIVAL.benefit - RIVAL.price);
+    return 1 / (1 + Math.exp(-EPSILON * csGap));
+  }
+
+  // =================================================================
+  // Brand-name heuristic (deterministic, intentionally silly)
+  // =================================================================
+  function brandBoost(name) {
+    if (!name) return { score: 0, tier: 0 };
+    const n = name.trim();
+    if (!n) return { score: 0, tier: 0 };
+    const lower = n.toLowerCase();
+    const letters = n.replace(/[^A-Za-z\u00C0-\u00FF]/g, '').length;
+    let score = 0;
+
+    if (letters >= 6 && letters <= 10) score += 0.5;
+
+    const keywords = [
+      'gold','noir','grand','luxe','artisan','pure','divin','maison',
+      'cacao','cocoa','nobl','rare','origin','signature','royal','cru',
+      'prem','vintage','reserve','legacy','single','craft'
+    ];
+    if (keywords.some(k => lower.includes(k))) score += 1;
+
+    if (/[xzq]/i.test(lower)) score += 0.5;
+    if (/[\u00e0\u00e2\u00e9\u00e8\u00ea\u00eb\u00ee\u00ef\u00f4\u00f6\u00f9\u00fb\u00fc\u00ff\u00e7\u00f1]/i.test(n)) score += 0.5;
+    if (n.split(/\s+/).filter(Boolean).length >= 2) score += 0.5;
+    if (/[&\u2019']/.test(n)) score += 0.5;
+
+    score = Math.max(0, Math.min(3, score));
+
+    let tier;
+    if (score <= 0)        tier = 0;
+    else if (score <= 0.5) tier = 1;
+    else if (score <= 1.5) tier = 2;
+    else if (score <= 2.5) tier = 3;
+    else                   tier = 4;
+
+    return { score, tier };
+  }
+
+  const BRAND_REACTIONS = [
+    ['Forgettable.',      'Nothing special.'],
+    ['Passable.',         'It\u2019ll do.'],
+    ['Decent pick.',      'Not bad at all.'],
+    ['Nice choice!',      'That works nicely.'],
+    ['Great name!',       'Really catchy pick!']
+  ];
+  function brandReaction(tier, name) {
+    const bucket = BRAND_REACTIONS[tier] || BRAND_REACTIONS[0];
+    const idx = (name ? name.length : 0) % bucket.length;
+    return bucket[idx];
+  }
+
+  // =================================================================
+  // Consultant memos
+  // =================================================================
+  const HINTS = [
+    {
+      who: 'Cocoa Craft Advisory',
+      text: 'Consumer loyalty in packaged chocolate is softer than most brand managers assume. Shoppers will switch bars when they see a clear reason &mdash; a better recipe, a better price, or both. Your positioning really does move market share, so the game is worth playing.'
+    },
+    {
+      who: 'Bonbon Insights Group',
+      text: 'Sensory-panel research across dozens of bar formats shows a consistent pattern: upgrading the recipe adds real perceived value, but every upgrade also pulls your cost up. Not every fancy ingredient is worth the margin it eats. Choose the upgrades whose benefit-to-cost ratio actually beats the simple ones.'
+    },
+    {
+      who: 'Truffle &amp; Partners',
+      text: 'Cutting costs while preserving perceived quality is the holy grail of the category. With the trade-off you are facing (each percent of cost saved shaves half a percent off benefit), cost cuts are a real margin lever &mdash; they free up room to price aggressively, which matters more than it looks in a deal-sensitive market.'
+    },
+    {
+      who: 'Criollo Strategy',
+      text: 'Shoppers in this category are notably deal-sensitive. A clear consumer-surplus edge over the leading incumbent &mdash; whether through a lower price, a better recipe, or both &mdash; pulls share across briskly. Even a modest undercut at the till can swing a meaningful slice of the market when your cost structure allows it.'
+    },
+    {
+      who: 'Praline Capital Consulting',
+      text: 'Having benchmarked the winning players in packaged chocolate, our view is that the profitable strategies involve meaningful but not extreme recipe upgrades paired with disciplined pricing. Gold-plated bars tend to price themselves out of the shelf. A middling upgrade set with a smart price tends to capture the most value in this market.'
+    }
+  ];
+
+  // =================================================================
+  // State
+  // =================================================================
+  let state;
+  function initialState() {
+    const upgrades = {};
+    UPGRADES.forEach(u => { upgrades[u.key] = false; });
+    return {
+      upgrades: upgrades,
+      staged: { ...upgrades },
+      costCut: 0,
+      price: 60,
+      brandName: '',
+      brandScore: 0,
+      brandTier: 0,
+      priceLeft: 5,
+      recipeLeft: 5,
+      costCutLeft: 5,
+      brandLeft: 5,
+      hintLeft: 5,
+      hintsGiven: 0,
+      finalized: false,
+      history: [],
+      lastHint: null
+    };
+  }
+
+  function core() {
+    let upBenefit = 0, upCost = 0;
+    UPGRADES.forEach(u => {
+      if (state.upgrades[u.key]) { upBenefit += u.benefit; upCost += u.cost; }
+    });
+    const B_raw = 100 + upBenefit;
+    const C_raw = 60 + upCost;
+    const r = state.costCut / 100;
+    const B_afterCut = B_raw * (1 - BENEFIT_PENALTY_RATIO * r);
+    const C_afterCut = C_raw * (1 - r);
+    const B = B_afterCut + state.brandScore;
+    const C = C_afterCut;
+    const share = hiddenShare(B, state.price);
+    const margin = state.price - C;
+    const profit = margin * share * MARKET_SIZE;
+    return { B_raw, C_raw, B, C, share, margin, profit };
+  }
+
+  // =================================================================
+  // SVG chart
+  // =================================================================
+  const W = 440, H = 320;
+  const PAD_L = 56, PAD_R = 56, PAD_T = 22, PAD_B = 34;
+  const CHART_W = W - PAD_L - PAD_R;
+  const CHART_H = H - PAD_T - PAD_B;
+  const Y_MAX = 150;
+  const BAR_GAP = 20;
+  const COLORS = { cost: '#2b0a06', profit: '#d4a24a', cs: '#ffc1bd', loss: '#c44536' };
+
+  function yScale(v) {
+    return PAD_T + CHART_H - (Math.max(0, v) / Y_MAX) * CHART_H;
+  }
+
+  function renderChart() {
+    const svg = document.getElementById('chart');
+    if (!svg) return;
+    const c = core();
+    const rivalShare = 1 - c.share;
+    const playerShare = c.share;
+    const barAreaW = CHART_W - BAR_GAP;
+    const rivalW = Math.max(2, rivalShare * barAreaW);
+    const playerW = Math.max(2, playerShare * barAreaW);
+    const rivalX = PAD_L;
+    const playerX = rivalX + rivalW + BAR_GAP;
+    const y0 = yScale(0);
+
+    const parts = [];
+
+    const yCostR = yScale(RIVAL.cost);
+    const yBenR  = yScale(RIVAL.benefit);
+    parts.push(`<rect x="${rivalX}" y="${yCostR}" width="${rivalW}" height="${y0 - yCostR}" fill="${COLORS.cost}"/>`);
+    parts.push(`<rect x="${rivalX}" y="${yBenR}"  width="${rivalW}" height="${yCostR - yBenR}" fill="${COLORS.cs}"/>`);
+    parts.push(`<text x="${rivalX + rivalW/2}" y="${y0 + 18}" text-anchor="middle" class="firm-label">Rivals (${Math.round(rivalShare*100)}%)</text>`);
+
+    const yCostP  = yScale(c.C);
+    const yBenP   = yScale(Math.max(c.B, state.price));
+    const yPriceP = yScale(state.price);
+
+    parts.push(`<rect x="${playerX}" y="${yCostP}" width="${playerW}" height="${y0 - yCostP}" fill="${COLORS.cost}"/>`);
+    if (state.price >= c.C) {
+      parts.push(`<rect x="${playerX}" y="${yPriceP}" width="${playerW}" height="${yCostP - yPriceP}" fill="${COLORS.profit}"/>`);
+      if (c.B > state.price) {
+        parts.push(`<rect x="${playerX}" y="${yBenP}" width="${playerW}" height="${yPriceP - yBenP}" fill="${COLORS.cs}"/>`);
+      }
+    } else {
+      if (c.B > state.price) {
+        parts.push(`<rect x="${playerX}" y="${yBenP}" width="${playerW}" height="${yPriceP - yBenP}" fill="${COLORS.cs}"/>`);
+      }
+      parts.push(`<rect x="${playerX}" y="${yCostP}" width="${playerW}" height="${yPriceP - yCostP}" fill="${COLORS.loss}"/>`);
+    }
+    parts.push(`<text x="${playerX + playerW/2}" y="${y0 + 18}" text-anchor="middle" class="firm-label">You (${Math.round(playerShare*100)}%)</text>`);
+    parts.push(`<line x1="${PAD_L}" y1="${y0}" x2="${PAD_L + CHART_W}" y2="${y0}" class="ax-tick"/>`);
+
+    svg.innerHTML = parts.join('');
+  }
+
+  // =================================================================
+  // Stats
+  // =================================================================
+  function renderStats() {
+    const c = core();
+    const el = document.getElementById('stats-grid');
+    if (!el) return;
+    const profitClass = c.profit < 0 ? 'val negative' : 'val';
+    const numUpgrades = UPGRADES.filter(u => state.upgrades[u.key]).length;
+    const brandLine = state.brandName
+      ? `&ldquo;${escapeHtml(state.brandName)}&rdquo; (+${state.brandScore.toFixed(1)})`
+      : '<span style="color:#b8a88e;">(no brand)</span>';
+    el.innerHTML = `
+      <div></div>
+      <div class="col-head">Rivals</div>
+      <div class="col-head">You</div>
+
+      <div class="label">Recipe upgrades</div>
+      <div class="val muted">&mdash;</div>
+      <div class="val">${numUpgrades} / ${UPGRADES.length}</div>
+
+      <div class="label">Cost cut</div>
+      <div class="val muted">&mdash;</div>
+      <div class="val">${state.costCut}%</div>
+
+      <div class="label">Benefit (WTP)</div>
+      <div class="val">${RIVAL.benefit.toFixed(1)}&cent;</div>
+      <div class="val">${c.B.toFixed(1)}&cent;</div>
+
+      <div class="label">Cost</div>
+      <div class="val">${RIVAL.cost.toFixed(1)}&cent;</div>
+      <div class="val">${c.C.toFixed(1)}&cent;</div>
+
+      <div class="label">Price</div>
+      <div class="val">${RIVAL.price.toFixed(1)}&cent;</div>
+      <div class="val">${Number(state.price).toFixed(1)}&cent;</div>
+
+      <div class="label">Per-unit margin</div>
+      <div class="val">0.0&cent;</div>
+      <div class="val">${c.margin.toFixed(1)}&cent;</div>
+
+      <div class="label">Market share</div>
+      <div class="val">${Math.round((1-c.share)*100)}%</div>
+      <div class="val">${Math.round(c.share*100)}%</div>
+
+      <div class="brand-line">
+        <span>Brand</span>
+        <span class="name">${brandLine}</span>
+      </div>
+
+      <div class="profit-row">
+        <div class="label">Your profit (margin &times; share &times; 1,000,000)</div>
+        <div class="${profitClass}">${formatProfit(c.profit)}</div>
+      </div>
+    `;
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, ch => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[ch]));
+  }
+
+  function formatProfit(cents) {
+    const dollars = cents / 100;
+    const sign = dollars < 0 ? '-' : '';
+    return sign + '$' + Math.round(Math.abs(dollars)).toLocaleString();
+  }
+
+  // =================================================================
+  // Recipe checkbox rendering
+  // =================================================================
+  function renderRecipeOptions() {
+    const el = document.getElementById('recipe-options');
+    if (!el) return;
+    el.innerHTML = UPGRADES.map(u => `
+      <label>
+        <input type="checkbox" data-key="${u.key}" ${state.staged[u.key] ? 'checked' : ''} ${state.finalized ? 'disabled' : ''}>
+        <span class="opt-name">${u.name}</span>
+      </label>
+    `).join('');
+    el.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+      cb.addEventListener('change', (e) => {
+        const k = e.target.dataset.key;
+        state.staged[k] = e.target.checked;
+      });
+    });
+  }
+
+  // =================================================================
+  // Budgets / buttons
+  // =================================================================
+  function renderBudgets() {
+    function set(id, n, suffix) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.textContent = `${n} / 5 ${suffix || 'left'}`;
+      el.classList.toggle('depleted', n <= 0);
+    }
+    set('budget-price',   state.priceLeft);
+    set('budget-recipe',  state.recipeLeft, 'revisions left');
+    set('budget-costcut', state.costCutLeft);
+    set('budget-brand',   state.brandLeft);
+    set('budget-hint',    state.hintLeft);
+
+    const ids = {
+      'btn-price':    state.priceLeft   <= 0 || state.finalized,
+      'btn-recipe':   state.recipeLeft  <= 0 || state.finalized,
+      'btn-costcut':  state.costCutLeft <= 0 || state.finalized,
+      'btn-brand':    state.brandLeft   <= 0 || state.finalized,
+      'btn-hint':     state.hintLeft    <= 0 || state.finalized || state.hintsGiven >= HINTS.length,
+      'btn-finalize': state.finalized
+    };
+    for (const [id, disabled] of Object.entries(ids)) {
+      const el = document.getElementById(id);
+      if (el) el.disabled = disabled;
+    }
+
+    const inputIds = ['input-price', 'input-costcut', 'input-brand'];
+    inputIds.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.disabled = state.finalized;
+    });
+  }
+
+  // =================================================================
+  // History
+  // =================================================================
+  function renderHistory() {
+    const ol = document.getElementById('history-list');
+    if (!ol) return;
+    if (state.history.length === 0) {
+      ol.innerHTML = '<li class="empty-row">No moves yet &mdash; start by picking some recipe upgrades, naming your brand, or adjusting price.</li>';
+      return;
+    }
+    ol.innerHTML = state.history.map((h, i) => {
+      const profitCell = h.profit === null
+        ? '<span class="move-profit muted">&mdash;</span>'
+        : `<span class="move-profit">${formatProfit(h.profit)}</span>`;
+      return `<li>
+        <span class="move-num">#${i+1}</span>
+        <span class="move-desc">${h.desc}</span>
+        ${profitCell}
+      </li>`;
+    }).join('');
+  }
+
+  // =================================================================
+  // Consultant memo
+  // =================================================================
+  function renderConsultant() {
+    const el = document.getElementById('consultant');
+    if (!el) return;
+    if (!state.lastHint) { el.classList.add('empty'); return; }
+    el.classList.remove('empty');
+    document.getElementById('consultant-who').innerHTML = `&#128188; Memo #${state.hintsGiven} &mdash; ${state.lastHint.who}`;
+    document.getElementById('consultant-text').innerHTML = state.lastHint.text;
+  }
+
+  // =================================================================
+  // Brand feedback card
+  // =================================================================
+  function renderBrandFeedback() {
+    const el = document.getElementById('brand-feedback');
+    if (!el) return;
+    if (!state.brandName) {
+      el.innerHTML = '&nbsp;';
+      return;
+    }
+    const reaction = brandReaction(state.brandTier, state.brandName);
+    el.innerHTML = `&ldquo;${escapeHtml(state.brandName)}&rdquo; &rarr; <strong>${reaction}</strong>`;
+  }
+
+  // =================================================================
+  // Final screen (modified for multiplayer — no Play Again button)
+  // =================================================================
+  const TARGET_PROFIT = 5000000;
+
+  function renderFinalScreen() {
+    const slot = document.getElementById('final-screen-slot');
+    if (!slot) return;
+    if (!state.finalized) { slot.innerHTML = ''; return; }
+    const c = core();
+    const profitClass = c.profit < 0 ? 'final-profit negative' : 'final-profit';
+    const upgradeNames = UPGRADES.filter(u => state.upgrades[u.key]).map(u => u.name).join(', ') || '(none)';
+    slot.innerHTML = `
+      <div class="final-screen">
+        <h2>&#127851; Final profit</h2>
+        <div class="${profitClass}">${formatProfit(c.profit)}</div>
+        <div class="sub">
+          Brand: <strong>${state.brandName ? escapeHtml(state.brandName) : '(unnamed)'}</strong>${state.brandName ? ` (+${state.brandScore.toFixed(1)})` : ''}<br>
+          Recipe: <strong>${upgradeNames}</strong><br>
+          Cost cut <strong>${state.costCut}%</strong> &middot; Benefit <strong>${c.B.toFixed(1)}&cent;</strong> &middot; Cost <strong>${c.C.toFixed(1)}&cent;</strong> &middot; Price <strong>${Number(state.price).toFixed(1)}&cent;</strong> &middot; Share <strong>${(c.share*100).toFixed(1)}%</strong>
+        </div>
+        <div class="sub">
+          A well-optimised strategy in this game tops out around <strong>${formatProfit(TARGET_PROFIT)}</strong>. How close did you get?
+        </div>
+      </div>
+    `;
+  }
+
+  // =================================================================
+  // Orchestrator
+  // =================================================================
+  function render() {
+    renderChart();
+    renderStats();
+    renderBudgets();
+    renderHistory();
+    renderConsultant();
+    renderBrandFeedback();
+    renderFinalScreen();
+  }
+
+  // =================================================================
+  // Auto-end (modified for multiplayer — calls async finalize)
+  // =================================================================
+  function checkAutoEnd() {
+    if (state.priceLeft <= 0 && state.recipeLeft <= 0 && state.costCutLeft <= 0 && state.brandLeft <= 0 && state.hintLeft <= 0) {
+      if (!state.finalized) {
+        finalize();
+      }
+    }
+  }
+
+  // =================================================================
+  // Actions
+  // =================================================================
+  function commitPrice() {
+    if (state.priceLeft <= 0 || state.finalized) return;
+    const raw = parseFloat(document.getElementById('input-price').value);
+    if (isNaN(raw)) return;
+    const v = Math.max(0, Math.min(250, raw));
+    state.price = v;
+    state.priceLeft--;
+    const c = core();
+    state.history.push({ desc: `Set price to <strong>${Number(v).toFixed(1)}&cent;</strong>`, profit: c.profit });
+    checkAutoEnd();
+    render();
+  }
+
+  function commitRecipe() {
+    if (state.recipeLeft <= 0 || state.finalized) return;
+    state.upgrades = { ...state.staged };
+    state.recipeLeft--;
+    const numOn = UPGRADES.filter(u => state.upgrades[u.key]).length;
+    const c = core();
+    const names = UPGRADES.filter(u => state.upgrades[u.key]).map(u => u.name.replace(/&amp;/g,'&')).join(', ') || '(no upgrades)';
+    state.history.push({ desc: `Committed recipe: <strong>${numOn}</strong> upgrade${numOn === 1 ? '' : 's'} &mdash; ${names}`, profit: c.profit });
+    checkAutoEnd();
+    render();
+  }
+
+  function commitCostCut() {
+    if (state.costCutLeft <= 0 || state.finalized) return;
+    const v = parseInt(document.getElementById('input-costcut').value, 10);
+    if (isNaN(v)) return;
+    state.costCut = v;
+    state.costCutLeft--;
+    const c = core();
+    state.history.push({ desc: `Set cost cut to <strong>${v}%</strong>`, profit: c.profit });
+    checkAutoEnd();
+    render();
+  }
+
+  function commitBrand() {
+    if (state.brandLeft <= 0 || state.finalized) return;
+    const raw = document.getElementById('input-brand').value;
+    const name = raw.trim().slice(0, 40);
+    if (!name) return;
+    const { score, tier } = brandBoost(name);
+    state.brandName = name;
+    state.brandScore = score;
+    state.brandTier = tier;
+    state.brandLeft--;
+    const c = core();
+    state.history.push({ desc: `Brand name: <strong>&ldquo;${escapeHtml(name)}&rdquo;</strong> &mdash; ${brandReaction(tier, name)}`, profit: c.profit });
+    checkAutoEnd();
+    render();
+  }
+
+  function requestHint() {
+    if (state.hintLeft <= 0 || state.finalized) return;
+    if (state.hintsGiven >= HINTS.length) return;
+    state.lastHint = HINTS[state.hintsGiven];
+    state.hintsGiven++;
+    state.hintLeft--;
+    state.history.push({ desc: `Consulted <strong>${state.lastHint.who}</strong> (memo #${state.hintsGiven})`, profit: null });
+    checkAutoEnd();
+    render();
+  }
+
+  // =================================================================
+  // Finalize (multiplayer version — writes to Firebase)
+  // =================================================================
+  async function finalize() {
+    if (state.finalized) return;
+    state.finalized = true;
+    hideFinalizeConfirm();
+    const c = core();
+    // Write profit to Firebase
+    try {
+      await db.ref(`chocolate-rooms/${roomCode}/players/${playerId}`).update({
+        profit: Math.round(c.profit),
+        finalized: true
+      });
+    } catch(e) { console.error('Firebase write failed', e); }
+    render();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function showFinalizeConfirm() {
+    if (state.finalized) return;
+    document.getElementById('confirm-overlay').style.display = 'flex';
+  }
+  function hideFinalizeConfirm() {
+    const el = document.getElementById('confirm-overlay');
+    if (el) el.style.display = 'none';
+  }
+
+  function resetGame() {
+    state = initialState();
+    const priceEl = document.getElementById('input-price');
+    const costEl = document.getElementById('input-costcut');
+    const brandEl = document.getElementById('input-brand');
+    if (priceEl) priceEl.value = state.price;
+    if (costEl) costEl.value = state.costCut;
+    if (brandEl) brandEl.value = '';
+    renderRecipeOptions();
+    render();
+  }
+
+  // =================================================================
+  // Screen management
+  // =================================================================
+  function showScreen(id) {
+    document.querySelectorAll('.mp-screen').forEach(s => s.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+    // Update body class for background
+    document.body.className = '';
+    if (id === 'screen-join') document.body.classList.add('mp-join');
+    else if (id === 'screen-waiting') document.body.classList.add('mp-waiting');
+    else if (id === 'screen-final') document.body.classList.add('mp-final');
+    // screen-game uses the default game background (no class needed)
+  }
+
+  // =================================================================
+  // Join game
+  // =================================================================
+  async function joinGame() {
+    const pinInput = document.getElementById('input-pin');
+    const nameInput = document.getElementById('input-nickname');
+    const errorEl = document.getElementById('join-error');
+    const btn = document.getElementById('btn-join');
+
+    const pin = pinInput.value.trim();
+    const name = nameInput.value.trim();
+
+    // Validate
+    if (!/^\d{4}$/.test(pin)) {
+      errorEl.textContent = 'Please enter a 4-digit PIN.';
+      return;
+    }
+    if (!name || name.length < 1) {
+      errorEl.textContent = 'Please enter a nickname.';
+      return;
+    }
+
+    btn.disabled = true;
+    errorEl.textContent = 'Joining...';
+
+    try {
+      // Check if room exists and is in lobby
+      const snap = await db.ref(`chocolate-rooms/${pin}`).once('value');
+      if (!snap.exists()) {
+        errorEl.textContent = 'Room not found. Check the PIN.';
+        btn.disabled = false;
+        return;
+      }
+      const roomData = snap.val();
+      if (roomData.status !== 'lobby') {
+        errorEl.textContent = 'This game has already started.';
+        btn.disabled = false;
+        return;
+      }
+
+      // Push player to the room
+      const playerRef = db.ref(`chocolate-rooms/${pin}/players`).push();
+      await playerRef.set({
+        name: name,
+        joinedAt: firebase.database.ServerValue.TIMESTAMP,
+        profit: 0,
+        finalized: false
+      });
+
+      roomCode = pin;
+      playerId = playerRef.key;
+      playerName = name;
+
+      // Save to sessionStorage for reconnect
+      sessionStorage.setItem('choc_roomCode', roomCode);
+      sessionStorage.setItem('choc_playerId', playerId);
+      sessionStorage.setItem('choc_playerName', playerName);
+
+      // Show waiting screen
+      document.getElementById('waiting-pin-display').textContent = roomCode;
+      showScreen('screen-waiting');
+
+      // Listen for game state changes
+      listenForGameState();
+
+    } catch (e) {
+      console.error('Join error:', e);
+      errorEl.textContent = 'Connection error. Please try again.';
+      btn.disabled = false;
+    }
+  }
+
+  // =================================================================
+  // Listen for game state changes
+  // =================================================================
+  function listenForGameState() {
+    if (roomListener) {
+      db.ref(`chocolate-rooms/${roomCode}`).off('value', roomListener);
+    }
+    roomListener = db.ref(`chocolate-rooms/${roomCode}`).on('value', (snap) => {
+      if (!snap.exists()) return;
+      const roomData = snap.val();
+
+      if (roomData.status === 'lobby') {
+        // Stay on waiting screen
+      } else if (roomData.status === 'playing') {
+        if (!gameStarted) {
+          gameStarted = true;
+          // Initialize the game
+          resetGame();
+          renderRecipeOptions();
+          render();
+          showScreen('screen-game');
+          // Set player name in timer bar
+          document.getElementById('timer-name').textContent = playerName;
+          // Start countdown
+          if (roomData.timerEnd) {
+            startCountdown(roomData.timerEnd);
+          }
+        }
+      } else if (roomData.status === 'finished') {
+        // Auto-finalize if not yet finalized
+        if (!state.finalized) {
+          finalize();
+        }
+        // Stop timer
+        if (timerInterval) {
+          clearInterval(timerInterval);
+          timerInterval = null;
+        }
+        // Stay on game screen — students keep seeing their own results
+        // No ranking screen shown to players
+      }
+    });
+  }
+
+  // =================================================================
+  // Countdown timer
+  // =================================================================
+  function startCountdown(timerEnd) {
+    const bar = document.getElementById('timer-bar');
+    const countdownEl = document.getElementById('timer-countdown');
+
+    function updateTimer() {
+      const now = Date.now();
+      const remaining = Math.max(0, timerEnd - now);
+      const totalSeconds = Math.ceil(remaining / 1000);
+      const minutes = Math.floor(totalSeconds / 60);
+      const seconds = totalSeconds % 60;
+      countdownEl.textContent = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+
+      // Urgent state at <= 60 seconds
+      if (totalSeconds <= 60 && totalSeconds > 0) {
+        bar.classList.add('urgent');
+      } else {
+        bar.classList.remove('urgent');
+      }
+
+      // Time's up
+      if (remaining <= 0) {
+        clearInterval(timerInterval);
+        timerInterval = null;
+        countdownEl.textContent = '00:00';
+        bar.classList.add('urgent');
+        // Auto-finalize
+        if (!state.finalized) {
+          finalize();
+        }
+      }
+    }
+
+    updateTimer();
+    timerInterval = setInterval(updateTimer, 1000);
+  }
+
+  // =================================================================
+  // Final multiplayer screen
+  // =================================================================
+  function showFinalScreen(roomData) {
+    const players = roomData.players || {};
+    const playerList = Object.entries(players).map(([id, p]) => ({
+      id,
+      name: p.name || 'Unknown',
+      profit: p.profit || 0
+    }));
+    // Sort by profit descending
+    playerList.sort((a, b) => b.profit - a.profit);
+
+    // Find own rank
+    const myIndex = playerList.findIndex(p => p.id === playerId);
+    const myRank = myIndex + 1;
+    const myProfit = myIndex >= 0 ? playerList[myIndex].profit : 0;
+
+    // Set profit display
+    const profitEl = document.getElementById('mp-final-profit');
+    profitEl.textContent = formatProfit(myProfit);
+    profitEl.className = 'mp-final-profit' + (myProfit < 0 ? ' negative' : '');
+
+    // Set rank
+    const rankEl = document.getElementById('mp-final-rank');
+    const medals = ['', '\uD83E\uDD47', '\uD83E\uDD48', '\uD83E\uDD49']; // 1st, 2nd, 3rd
+    if (myRank >= 1 && myRank <= 3) {
+      rankEl.textContent = `${medals[myRank]} ${myRank === 1 ? '1st' : myRank === 2 ? '2nd' : '3rd'} Place!`;
+    } else {
+      rankEl.textContent = `#${myRank} out of ${playerList.length}`;
+    }
+
+    // Build podium (top 3)
+    const podiumList = document.getElementById('mp-podium-list');
+    const top3 = playerList.slice(0, 3);
+    podiumList.innerHTML = top3.map((p, i) => {
+      const medal = medals[i + 1] || `#${i + 1}`;
+      const isYou = p.id === playerId;
+      return `<div class="mp-podium-entry">
+        <span class="mp-podium-medal">${medal}</span>
+        <span class="mp-podium-name${isYou ? ' is-you' : ''}">${escapeHtml(p.name)}${isYou ? ' (you)' : ''}</span>
+        <span class="mp-podium-profit">${formatProfit(p.profit)}</span>
+      </div>`;
+    }).join('');
+
+    showScreen('screen-final');
+
+    // Confetti if rank 1
+    if (myRank === 1) {
+      launchConfetti();
+    }
+  }
+
+  // =================================================================
+  // Confetti
+  // =================================================================
+  function launchConfetti() {
+    const container = document.getElementById('confetti-container');
+    container.innerHTML = '';
+    const colors = ['#d4a24a', '#c44536', '#6b4524', '#ffc1bd', '#8c4a46', '#f4ead2', '#2b0a06'];
+    for (let i = 0; i < 80; i++) {
+      const piece = document.createElement('div');
+      piece.className = 'confetti-piece';
+      piece.style.left = Math.random() * 100 + '%';
+      piece.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+      piece.style.width = (Math.random() * 8 + 6) + 'px';
+      piece.style.height = (Math.random() * 8 + 6) + 'px';
+      piece.style.borderRadius = Math.random() > 0.5 ? '50%' : '2px';
+      piece.style.animationDuration = (Math.random() * 2 + 2) + 's';
+      piece.style.animationDelay = (Math.random() * 1.5) + 's';
+      container.appendChild(piece);
+    }
+    // Clean up after animation
+    setTimeout(() => { container.innerHTML = ''; }, 5000);
+  }
+
+  // =================================================================
+  // Auto-reconnect from sessionStorage
+  // =================================================================
+  function attemptReconnect() {
+    const savedRoom = sessionStorage.getItem('choc_roomCode');
+    const savedPlayer = sessionStorage.getItem('choc_playerId');
+    const savedName = sessionStorage.getItem('choc_playerName');
+
+    if (savedRoom && savedPlayer && savedName) {
+      roomCode = savedRoom;
+      playerId = savedPlayer;
+      playerName = savedName;
+
+      // Check room still exists
+      db.ref(`chocolate-rooms/${roomCode}`).once('value').then(snap => {
+        if (!snap.exists()) {
+          // Room gone, clear session and stay on join
+          sessionStorage.removeItem('choc_roomCode');
+          sessionStorage.removeItem('choc_playerId');
+          sessionStorage.removeItem('choc_playerName');
+          return;
+        }
+        const roomData = snap.val();
+        const players = roomData.players || {};
+
+        // Check player still in room
+        if (!players[playerId]) {
+          sessionStorage.removeItem('choc_roomCode');
+          sessionStorage.removeItem('choc_playerId');
+          sessionStorage.removeItem('choc_playerName');
+          return;
+        }
+
+        // Reconnect based on current status
+        if (roomData.status === 'lobby') {
+          document.getElementById('waiting-pin-display').textContent = roomCode;
+          showScreen('screen-waiting');
+          listenForGameState();
+        } else if (roomData.status === 'playing') {
+          gameStarted = true;
+          state = initialState();
+          renderRecipeOptions();
+          render();
+          document.getElementById('timer-name').textContent = playerName;
+          showScreen('screen-game');
+          if (roomData.timerEnd) {
+            startCountdown(roomData.timerEnd);
+          }
+          listenForGameState();
+        } else if (roomData.status === 'finished') {
+          state = initialState();
+          state.finalized = true;
+          showFinalScreen(roomData);
+        }
+      }).catch(() => {
+        // Failed to reconnect, stay on join screen
+        sessionStorage.removeItem('choc_roomCode');
+        sessionStorage.removeItem('choc_playerId');
+        sessionStorage.removeItem('choc_playerName');
+      });
+    }
+  }
+
+  // =================================================================
+  // Wire up events
+  // =================================================================
+  document.getElementById('btn-join').addEventListener('click', joinGame);
+  document.getElementById('input-pin').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      document.getElementById('input-nickname').focus();
+    }
+  });
+  document.getElementById('input-nickname').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') joinGame();
+  });
+
+  // Game button events (safe even when elements are in inactive screen)
+  document.getElementById('btn-price').addEventListener('click', commitPrice);
+  document.getElementById('btn-recipe').addEventListener('click', commitRecipe);
+  document.getElementById('btn-costcut').addEventListener('click', commitCostCut);
+  document.getElementById('btn-brand').addEventListener('click', commitBrand);
+  document.getElementById('btn-hint').addEventListener('click', requestHint);
+  document.getElementById('btn-finalize').addEventListener('click', showFinalizeConfirm);
+  document.getElementById('btn-confirm-finalize').addEventListener('click', finalize);
+  document.getElementById('btn-cancel-finalize').addEventListener('click', hideFinalizeConfirm);
+  document.getElementById('confirm-overlay').addEventListener('click', (e) => {
+    if (e.target.id === 'confirm-overlay') hideFinalizeConfirm();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') hideFinalizeConfirm();
+  });
+
+  // =================================================================
+  // Initialize
+  // =================================================================
+  state = initialState();
+  attemptReconnect();
+</script>
+</body>
+</html>

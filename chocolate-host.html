@@ -1,0 +1,1299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chocolate Bar Challenge — Game Host</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;0,9..144,700;0,9..144,800;1,9..144,500&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<style>
+/* ── Reset & base ──────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Nunito', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: radial-gradient(circle at top left, #f7eed6 0%, #f4ead2 45%, #ecdfbf 100%);
+  color: #2b0a06;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+h1, h2, h3, .fraunces {
+  font-family: 'Fraunces', 'Georgia', serif;
+  font-optical-sizing: auto;
+}
+
+/* ── Screen management ─────────────────────── */
+.screen { display: none; min-height: 100vh; }
+.screen.active { display: flex; flex-direction: column; }
+
+/* ── Decorative chocolate bar ─────────────── */
+.choco-bar {
+  display: flex;
+  gap: 3px;
+  justify-content: center;
+  margin: 8px 0 16px;
+}
+.choco-bar span {
+  width: 22px;
+  height: 10px;
+  border-radius: 2px;
+  background: linear-gradient(180deg, #6b4524 0%, #4a2e16 60%, #2b0a06 100%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.18), inset 0 -1px 0 rgba(0,0,0,0.25);
+}
+
+/* ── Buttons ──────────────────────────────── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 40px;
+  border: none;
+  border-radius: 14px;
+  font-family: 'Nunito', sans-serif;
+  font-size: 1.1rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.btn:hover { transform: translateY(-2px); }
+.btn:active { transform: translateY(0); }
+.btn-primary {
+  background: #6b4524;
+  color: #f4ead2;
+  box-shadow: 0 4px 20px rgba(107,69,36,0.3);
+}
+.btn-primary:hover { background: #8c5a30; box-shadow: 0 6px 28px rgba(107,69,36,0.4); }
+.btn-secondary {
+  background: #fffaf0;
+  color: #6b4524;
+  border: 1px solid #e6d7b8;
+}
+.btn-secondary:hover { background: #f7eed6; }
+.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+/* ── Welcome screen ───────────────────────── */
+#screen-welcome {
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  text-align: center;
+  padding: 40px;
+}
+.welcome-emoji { font-size: 4rem; }
+.welcome-title {
+  font-family: 'Fraunces', 'Georgia', serif;
+  font-size: 3.5rem;
+  font-weight: 800;
+  color: #6b4524;
+  line-height: 1.2;
+}
+.welcome-sub {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: #8c4a46;
+}
+.welcome-note {
+  font-size: 1rem;
+  color: #8c4a46;
+  max-width: 500px;
+}
+
+/* ── QR code section ─────────────────────── */
+.player-qr {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0;
+}
+.player-qr img {
+  border-radius: 16px;
+  background: #fffaf0;
+  padding: 12px;
+  border: 2px solid #e6d7b8;
+}
+.player-link { text-align: center; }
+.player-link a {
+  color: #6b4524;
+  font-weight: 800;
+  font-size: 1.4rem;
+  letter-spacing: 0.01em;
+  text-decoration: none;
+}
+.player-link a:hover { text-decoration: underline; }
+
+/* ── Lobby screen ─────────────────────────── */
+#screen-lobby {
+  align-items: center;
+  padding: 40px 20px;
+  gap: 20px;
+}
+.lobby-header { text-align: center; }
+.lobby-label {
+  font-size: 1rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: #6b4524;
+  margin-bottom: 8px;
+}
+.room-code {
+  font-family: 'Nunito', sans-serif;
+  font-size: 6rem;
+  font-weight: 800;
+  letter-spacing: 0.15em;
+  color: #2b0a06;
+  background: #fffaf0;
+  border: 3px solid #6b4524;
+  border-radius: 20px;
+  padding: 10px 50px;
+  text-align: center;
+}
+.player-count {
+  font-size: 1.1rem;
+  color: #8c4a46;
+}
+.player-count strong { color: #6b4524; }
+.player-grid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  max-width: 900px;
+  min-height: 60px;
+}
+.player-tile {
+  background: #fffaf0;
+  border: 1px solid #e6d7b8;
+  border-radius: 10px;
+  padding: 8px 18px;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #2b0a06;
+  animation: popIn 0.3s ease;
+}
+@keyframes popIn {
+  0% { transform: scale(0); opacity: 0; }
+  70% { transform: scale(1.1); }
+  100% { transform: scale(1); opacity: 1; }
+}
+.lobby-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+/* ── Playing screen ───────────────────────── */
+#screen-playing {
+  padding: 20px;
+}
+.playing-topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 28px;
+  background: #fffaf0;
+  border: 1px solid #e6d7b8;
+  border-radius: 14px;
+  margin-bottom: 24px;
+}
+.host-timer {
+  font-family: 'Nunito', sans-serif;
+  font-size: 3rem;
+  font-weight: 800;
+  color: #2b0a06;
+  background: #f7eed6;
+  border: 2px solid #e6d7b8;
+  border-radius: 14px;
+  padding: 8px 28px;
+  min-width: 160px;
+  text-align: center;
+  letter-spacing: 0.05em;
+}
+.host-timer.urgent {
+  color: #c44536;
+  border-color: #c44536;
+  background: #fff0ee;
+  animation: timerPulse 1s infinite;
+}
+@keyframes timerPulse { 0%,100% { opacity: 1; } 50% { opacity: 0.6; } }
+
+.submission-counter {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.counter-bar {
+  width: 220px;
+  height: 10px;
+  background: #e6d7b8;
+  border-radius: 5px;
+  overflow: hidden;
+}
+.counter-fill {
+  height: 100%;
+  background: #6b4524;
+  border-radius: 5px;
+  transition: width 0.5s ease;
+  width: 0%;
+}
+.counter-text {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: #8c4a46;
+}
+.counter-text strong { color: #6b4524; }
+
+.playing-grid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  max-width: 1100px;
+  margin: 0 auto 24px;
+}
+.playing-tile {
+  background: #fffaf0;
+  border: 1px solid #e6d7b8;
+  border-radius: 10px;
+  padding: 10px 20px;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #2b0a06;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.3s ease;
+}
+.playing-tile.finalized {
+  border-color: #6b4524;
+  background: #f7eed6;
+}
+.playing-tile .check {
+  font-size: 1.1rem;
+  color: #6b4524;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+.playing-tile.finalized .check { opacity: 1; }
+
+.playing-actions {
+  text-align: center;
+  margin-top: 24px;
+}
+
+/* ── Final screen ─────────────────────────── */
+#screen-final {
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  padding: 40px 20px;
+  text-align: center;
+}
+.final-title {
+  font-family: 'Fraunces', 'Georgia', serif;
+  font-size: 2.6rem;
+  font-weight: 800;
+  color: #2b0a06;
+}
+.podium {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 12px;
+  margin: 10px 0;
+}
+.podium-place {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.podium-bar {
+  width: 150px;
+  border-radius: 14px 14px 0 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 18px 12px;
+}
+.podium-1 .podium-bar { height: 190px; background: #eab308; }
+.podium-2 .podium-bar { height: 145px; background: #94a3b8; }
+.podium-3 .podium-bar { height: 115px; background: #6b4524; }
+.podium-medal { font-size: 2.2rem; }
+.podium-name {
+  font-weight: 700;
+  font-size: 1.15rem;
+  color: #fff;
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.podium-profit {
+  font-size: 0.9rem;
+  color: rgba(255,255,255,0.75);
+  font-weight: 700;
+}
+
+.final-leaderboard {
+  width: 100%;
+  max-width: 620px;
+  background: #fffaf0;
+  border: 1px solid #e6d7b8;
+  border-radius: 16px;
+  padding: 20px;
+  max-height: 40vh;
+  overflow-y: auto;
+  text-align: left;
+}
+.lb-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  margin-bottom: 4px;
+  transition: background 0.2s;
+}
+.lb-row:nth-child(odd) { background: #f7eed6; }
+.lb-row.top-1 { background: #fef9c3; }
+.lb-row.top-2 { background: #f1f5f9; }
+.lb-row.top-3 { background: #fdf2e9; }
+.lb-rank {
+  width: 32px;
+  text-align: center;
+  font-weight: 800;
+  font-size: 0.95rem;
+  color: #8c4a46;
+}
+.top-1 .lb-rank { color: #eab308; font-size: 1.2rem; }
+.top-2 .lb-rank { color: #94a3b8; font-size: 1.1rem; }
+.top-3 .lb-rank { color: #6b4524; font-size: 1.05rem; }
+.lb-name {
+  flex: 1;
+  font-weight: 600;
+  font-size: 1rem;
+  color: #2b0a06;
+}
+.lb-profit {
+  font-weight: 800;
+  font-size: 1.05rem;
+  color: #6b4524;
+  min-width: 80px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Confetti ─────────────────────────────── */
+.confetti-piece {
+  position: fixed;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  z-index: 1000;
+  pointer-events: none;
+  animation: confettiFall linear forwards;
+}
+@keyframes confettiFall {
+  0% { transform: translateY(-10vh) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(110vh) rotate(720deg); opacity: 0; }
+}
+
+/* ── Preview screen ───────────────────────── */
+#screen-preview { padding: 0; }
+#screen-preview.active { display: flex; flex-direction: column; }
+.preview-topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 24px;
+  background: #2b0a06;
+  color: #f4ead2;
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  box-shadow: 0 2px 12px rgba(43,10,6,0.3);
+}
+.preview-info {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.preview-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: #d4a24a;
+}
+.preview-pin {
+  font-size: 1.8rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  color: #fff;
+}
+.preview-players {
+  font-size: 0.95rem;
+  color: #f4ead2;
+}
+.preview-players strong { color: #d4a24a; }
+.preview-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.preview-frame {
+  flex: 1;
+  width: 100%;
+  border: none;
+  min-height: calc(100vh - 56px);
+}
+
+/* ── Solution panel ───────────────────────── */
+.solution-panel {
+  flex: 1;
+  overflow-y: auto;
+  padding: 32px 24px;
+  background: radial-gradient(circle at top left, #f7eed6 0%, #f4ead2 45%, #ecdfbf 100%);
+}
+.solution-container {
+  max-width: 1000px;
+  margin: 0 auto;
+}
+.solution-title {
+  font-family: 'Fraunces', Georgia, serif;
+  font-size: 2rem;
+  font-weight: 700;
+  color: #2b0a06;
+  margin-bottom: 0;
+}
+.solution-profit-box {
+  background: #2b0a06;
+  color: #f4ead2;
+  border-radius: 14px;
+  padding: 20px 28px;
+  text-align: center;
+  margin-bottom: 24px;
+}
+.solution-profit-label {
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #d4a24a;
+  margin-bottom: 4px;
+}
+.solution-profit-value {
+  font-family: 'Fraunces', Georgia, serif;
+  font-size: 3rem;
+  font-weight: 800;
+  color: #d4a24a;
+}
+.solution-chart-wrapper {
+  background: #fffaf0;
+  border: 1px solid #e6d7b8;
+  border-radius: 12px;
+  padding: 18px 20px 12px;
+  margin-bottom: 20px;
+}
+.solution-chart { display: block; width: 100%; max-width: 520px; height: auto; margin: 0 auto; }
+.sol-legend { font-size: 11px; fill: #6b4524; font-weight: 600; font-family: 'Nunito', sans-serif; }
+.sol-tick { stroke: #e6d7b8; stroke-width: 1; }
+.solution-legend {
+  display: flex; gap: 18px; justify-content: center; margin-top: 8px; font-size: 0.75rem; color: #6b4524;
+}
+.sol-legend-item { display: flex; align-items: center; gap: 5px; }
+.sol-sw { width: 12px; height: 12px; border-radius: 2px; }
+
+.solution-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.solution-card {
+  background: #fffaf0;
+  border: 1px solid #e6d7b8;
+  border-radius: 12px;
+  padding: 18px 20px;
+}
+.solution-card h3 {
+  font-family: 'Fraunces', Georgia, serif;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #6b4524;
+  margin-bottom: 10px;
+}
+.solution-choice {
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  margin-bottom: 4px;
+}
+.solution-choice.correct {
+  background: #e8f5e9;
+  color: #2e7d32;
+  font-weight: 700;
+}
+.solution-choice.wrong {
+  background: #fce8e8;
+  color: #999;
+  text-decoration: line-through;
+  font-weight: 400;
+}
+.solution-choice .detail {
+  font-size: 0.78rem;
+  font-weight: 400;
+  color: #888;
+  text-decoration: none;
+  display: inline;
+}
+.solution-why {
+  font-size: 0.82rem;
+  color: #6b4524;
+  line-height: 1.5;
+  margin-top: 10px;
+}
+.solution-numbers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: center;
+  margin-bottom: 24px;
+}
+.solution-num {
+  background: #fffaf0;
+  border: 1px solid #e6d7b8;
+  border-radius: 10px;
+  padding: 12px 20px;
+  text-align: center;
+  min-width: 120px;
+}
+.num-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #8c4a46;
+  margin-bottom: 2px;
+}
+.num-value {
+  font-size: 1.3rem;
+  font-weight: 800;
+  color: #2b0a06;
+  font-variant-numeric: tabular-nums;
+}
+.num-value.highlight {
+  color: #d4a24a;
+  font-size: 1.5rem;
+}
+.solution-lesson {
+  background: #f4ead2;
+  border: 2px solid #8c4a46;
+  border-radius: 12px;
+  padding: 18px 22px;
+  font-size: 0.95rem;
+  color: #2b0a06;
+  line-height: 1.6;
+}
+
+/* ── Responsive ───────────────────────────── */
+@media (max-width: 900px) {
+  .room-code { font-size: 3.5rem; padding: 10px 30px; }
+  .welcome-title { font-size: 2.4rem; }
+  .host-timer { font-size: 2rem; min-width: 120px; padding: 6px 18px; }
+  .podium-bar { width: 110px; }
+  .playing-topbar { flex-wrap: wrap; gap: 12px; justify-content: center; }
+}
+@media (max-width: 600px) {
+  .room-code { font-size: 2.5rem; padding: 8px 20px; }
+  .welcome-title { font-size: 1.8rem; }
+  .counter-bar { width: 140px; }
+}
+</style>
+</head>
+<body>
+
+<!-- ══ Welcome Screen ══════════════════════════ -->
+<div id="screen-welcome" class="screen active">
+  <div class="welcome-emoji">🍫</div>
+  <div class="welcome-title">The Chocolate Bar<br>Challenge</div>
+  <div class="welcome-sub">Multiplayer</div>
+  <div class="choco-bar">
+    <span></span><span></span><span></span><span></span>
+    <span></span><span></span><span></span><span></span>
+  </div>
+  <div class="player-qr">
+    <img id="welcome-qr" alt="QR code" style="width:300px;height:300px;">
+    <div class="player-link"><a id="welcome-link" href="https://nicolamisani.github.io/tools/chocolate-play.html" target="_blank">nicolamisani.github.io/tools/chocolate-play.html</a></div>
+  </div>
+  <button class="btn btn-primary" id="btn-create">Create Game</button>
+</div>
+
+<!-- ══ Lobby Screen ════════════════════════════ -->
+<div id="screen-lobby" class="screen">
+  <div class="lobby-header">
+    <div class="lobby-label">Game PIN</div>
+    <div class="room-code" id="room-code">----</div>
+    <div class="player-qr" style="margin-top:16px">
+      <img id="lobby-qr" alt="QR code" style="width:260px;height:260px;">
+      <div class="player-link"><a href="https://nicolamisani.github.io/tools/chocolate-play.html" target="_blank" style="font-size:1.2rem">nicolamisani.github.io/tools/chocolate-play.html</a></div>
+    </div>
+  </div>
+  <div class="player-count"><strong id="player-count-num">0</strong> players connected</div>
+  <div class="player-grid" id="player-grid"></div>
+  <div class="lobby-actions">
+    <button class="btn btn-primary" id="btn-start" disabled>Start Game</button>
+    <button class="btn btn-secondary" id="btn-preview">📖 Preview Game</button>
+    <button class="btn btn-secondary" id="btn-music" style="margin-top:4px">🎵 Music: OFF</button>
+    <button class="btn btn-secondary" id="btn-music-custom" style="font-size:0.85rem; padding:8px 20px">Upload your own music</button>
+    <input type="file" id="music-file" accept="audio/*" style="display:none">
+  </div>
+</div>
+
+<!-- ══ Preview Screen ═════════════════════════ -->
+<div id="screen-preview" class="screen">
+  <div class="preview-topbar">
+    <div class="preview-info">
+      <span class="preview-label">PIN</span>
+      <span class="preview-pin" id="preview-pin">----</span>
+      <span class="preview-players"><strong id="preview-count">0</strong> players</span>
+    </div>
+    <div class="preview-actions">
+      <button class="btn btn-secondary" id="btn-back-lobby" style="padding:10px 20px;font-size:0.9rem">Back to Lobby</button>
+      <button class="btn btn-primary" id="btn-start-from-preview" disabled style="padding:12px 28px">Start Game</button>
+      <button class="btn btn-primary" id="btn-show-results" style="padding:12px 28px;display:none">🏆 Show Final Results</button>
+    </div>
+  </div>
+  <iframe id="preview-iframe" src="chocolate_bar-challenge.html" class="preview-frame"></iframe>
+  <div id="solution-panel" class="solution-panel" style="display:none">
+    <div class="solution-container">
+      <h1 class="solution-title"><span class="emoji">🍫</span> Optimal Strategy</h1>
+      <div class="choco-bar" style="margin:6px 0 20px"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+
+      <div class="solution-profit-box">
+        <div class="solution-profit-label">Maximum achievable profit</div>
+        <div class="solution-profit-value">≈ $50,700</div>
+      </div>
+
+      <div class="solution-chart-wrapper">
+        <svg class="solution-chart" viewBox="0 0 520 300" id="solution-chart"></svg>
+        <div class="solution-legend">
+          <div class="sol-legend-item"><div class="sol-sw" style="background:#ffc1bd"></div>Consumer Surplus</div>
+          <div class="sol-legend-item"><div class="sol-sw" style="background:#d4a24a"></div>Profit</div>
+          <div class="sol-legend-item"><div class="sol-sw" style="background:#2b0a06"></div>Cost</div>
+        </div>
+      </div>
+
+      <div class="solution-grid">
+        <div class="solution-card">
+          <h3>🧪 Recipe Upgrades</h3>
+          <div class="solution-choice correct">✓ Finer cocoa blend <span class="detail">+5 benefit, +3 cost (ratio 1.67)</span></div>
+          <div class="solution-choice correct">✓ Artisan conching <span class="detail">+4 benefit, +2 cost (ratio 2.0)</span></div>
+          <div class="solution-choice wrong">✗ Single-origin beans <span class="detail">+3 benefit, +5 cost (ratio 0.6)</span></div>
+          <div class="solution-choice wrong">✗ Hazelnut &amp; almond <span class="detail">+2 benefit, +4 cost (ratio 0.5)</span></div>
+          <div class="solution-choice wrong">✗ Organic certification <span class="detail">+2 benefit, +5 cost (ratio 0.4)</span></div>
+          <p class="solution-why">Only upgrades with a benefit/cost ratio &gt; 1 widen the value stick. The other three <em>shrink</em> it.</p>
+        </div>
+
+        <div class="solution-card">
+          <h3>✂️ Cost Cut</h3>
+          <div class="solution-choice correct" style="font-size:1.2rem">30% (maximum)</div>
+          <p class="solution-why">Each 1% cost cut only loses 0.5% benefit — the trade-off is asymmetric. Cutting hard is close to a free lunch: you give up a little WTP but reclaim twice as much in unit cost. This is a genuine <strong>value-creation</strong> lever.</p>
+        </div>
+
+        <div class="solution-card">
+          <h3>✨ Brand</h3>
+          <div class="solution-choice correct" style="font-size:1.2rem">"Maison Noir" → +3¢ benefit</div>
+          <p class="solution-why">A top-tier name adds a small but free benefit bump. Premium keywords, French flair, and the right length all contribute.</p>
+        </div>
+
+        <div class="solution-card">
+          <h3>🏷️ Price</h3>
+          <div class="solution-choice correct" style="font-size:1.2rem">56¢</div>
+          <p class="solution-why">A modest undercut of the rival's 60¢ price. This is a <strong>margin strategy</strong>: ~48% share with a 10.5¢ margin beats both extremes (parity price = no margin headroom; aggressive undercut = thin margins that bleed profit).</p>
+        </div>
+      </div>
+
+      <div class="solution-numbers">
+        <div class="solution-num"><div class="num-label">Consumer Surplus</div><div class="num-value">≈ 39.7¢</div></div>
+        <div class="solution-num"><div class="num-label">Benefit (B)</div><div class="num-value">≈ 95.7¢</div></div>
+        <div class="solution-num"><div class="num-label">Cost (C)</div><div class="num-value">≈ 45.5¢</div></div>
+        <div class="solution-num"><div class="num-label">Price (P)</div><div class="num-value">56.0¢</div></div>
+        <div class="solution-num"><div class="num-label">Margin</div><div class="num-value">≈ 10.5¢</div></div>
+        <div class="solution-num"><div class="num-label">Share</div><div class="num-value">≈ 48%</div></div>
+        <div class="solution-num"><div class="num-label">Profit</div><div class="num-value highlight">≈ $50,700</div></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ══ Playing Screen ══════════════════════════ -->
+<div id="screen-playing" class="screen">
+  <div class="playing-topbar">
+    <div class="host-timer" id="host-timer">10:00</div>
+    <div class="submission-counter">
+      <div class="counter-bar"><div class="counter-fill" id="counter-fill"></div></div>
+      <div class="counter-text"><strong id="sub-count">0</strong> / <span id="sub-total">0</span> finalized</div>
+    </div>
+  </div>
+  <div class="playing-grid" id="playing-grid"></div>
+  <div class="playing-actions">
+    <button class="btn btn-primary" id="btn-end-game">End Game</button>
+  </div>
+</div>
+
+<!-- ══ Final Screen ════════════════════════════ -->
+<div id="screen-final" class="screen">
+  <div class="final-title">Final Results</div>
+  <div class="choco-bar" style="margin:0 0 10px">
+    <span></span><span></span><span></span><span></span>
+    <span></span><span></span><span></span><span></span>
+  </div>
+  <div class="podium" id="podium"></div>
+  <div class="final-leaderboard" id="final-leaderboard"></div>
+  <button class="btn btn-secondary" id="btn-new-game" style="margin-top:12px">New Game</button>
+</div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════
+   FIREBASE CONFIGURATION
+   ═══════════════════════════════════════════════════════════════ */
+const firebaseConfig = {
+  apiKey: "AIzaSyBzUUbUZKt82UYaPOCR8SE8cgIlBCdG-MU",
+  authDomain: "chocolate-bar-game.firebaseapp.com",
+  databaseURL: "https://chocolate-bar-game-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "chocolate-bar-game",
+  storageBucket: "chocolate-bar-game.firebasestorage.app",
+  messagingSenderId: "564004953428",
+  appId: "1:564004953428:web:087520f1ac16c236f5bcc1"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+/* ═══════════════════════════════════════════════════════════════
+   CONSTANTS & STATE
+   ═══════════════════════════════════════════════════════════════ */
+const PLAYER_URL = 'https://nicolamisani.github.io/tools/chocolate-play.html';
+const GAME_DURATION_MS = 600000; // 10 minutes
+
+let roomCode = null;
+let hostId = null;
+let playersData = {};
+let playersListener = null;
+let hostTimerInterval = null;
+let musicWasPlaying = false;
+
+/* ═══════════════════════════════════════════════════════════════
+   UTILITY
+   ═══════════════════════════════════════════════════════════════ */
+const $ = id => document.getElementById(id);
+
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  $(id).classList.add('active');
+}
+
+function generateCode() {
+  return String(Math.floor(1000 + Math.random() * 9000));
+}
+
+function formatProfit(cents) {
+  if (cents == null) return '$0';
+  const dollars = Math.round(cents / 100);
+  const sign = dollars < 0 ? '-' : '';
+  const abs = Math.abs(dollars);
+  return sign + '$' + abs.toLocaleString('en-US');
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   CONFETTI
+   ═══════════════════════════════════════════════════════════════ */
+function spawnConfetti(count = 100) {
+  const colors = ['#6b4524','#d4a24a','#8c4a46','#eab308','#a85a54','#2b0a06','#ffc1bd'];
+  for (let i = 0; i < count; i++) {
+    const el = document.createElement('div');
+    el.className = 'confetti-piece';
+    el.style.left = Math.random() * 100 + 'vw';
+    el.style.background = colors[Math.floor(Math.random() * colors.length)];
+    el.style.animationDuration = (2 + Math.random() * 2) + 's';
+    el.style.animationDelay = Math.random() * 1.5 + 's';
+    el.style.width = (6 + Math.random() * 8) + 'px';
+    el.style.height = (6 + Math.random() * 8) + 'px';
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 5000);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   CREATE GAME
+   ═══════════════════════════════════════════════════════════════ */
+async function createGame() {
+  roomCode = generateCode();
+  hostId = 'host_' + Date.now();
+
+  try {
+    // Check if room already exists, regenerate if needed
+    const snap = await db.ref(`chocolate-rooms/${roomCode}`).once('value');
+    if (snap.exists()) {
+      roomCode = generateCode();
+    }
+
+    await db.ref(`chocolate-rooms/${roomCode}`).set({
+      hostId: hostId,
+      status: 'lobby',
+      createdAt: firebase.database.ServerValue.TIMESTAMP
+    });
+  } catch (e) {
+    alert('Firebase error: ' + e.message + '\n\nCheck that Firebase security rules allow writes to "chocolate-rooms".');
+    console.error(e);
+    return;
+  }
+
+  sessionStorage.setItem('choc_roomCode', roomCode);
+  sessionStorage.setItem('choc_hostId', hostId);
+
+  $('room-code').textContent = roomCode;
+  $('player-grid').innerHTML = '';
+  $('player-count-num').textContent = '0';
+  $('btn-start').disabled = true;
+  playersData = {};
+
+  showScreen('screen-lobby');
+  listenForPlayers();
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   LISTEN FOR PLAYERS
+   ═══════════════════════════════════════════════════════════════ */
+function listenForPlayers() {
+  if (playersListener) db.ref(`chocolate-rooms/${roomCode}/players`).off('value', playersListener);
+
+  playersListener = db.ref(`chocolate-rooms/${roomCode}/players`).on('value', snap => {
+    const players = snap.val() || {};
+    playersData = players;
+    const entries = Object.entries(players);
+
+    // Update lobby grid
+    const grid = $('player-grid');
+    grid.innerHTML = '';
+    entries.forEach(([id, p]) => {
+      const tile = document.createElement('div');
+      tile.className = 'player-tile';
+      tile.textContent = p.name;
+      grid.appendChild(tile);
+    });
+
+    $('player-count-num').textContent = entries.length;
+    $('btn-start').disabled = entries.length < 1;
+
+    // Update playing screen if active
+    if ($('screen-playing').classList.contains('active')) {
+      renderPlayingGrid();
+      updateSubmissionCounter();
+    }
+
+    // Update preview screen if active
+    if ($('screen-preview').classList.contains('active')) {
+      $('preview-count').textContent = entries.length;
+      $('btn-start-from-preview').disabled = entries.length < 1;
+    }
+  });
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   START GAME
+   ═══════════════════════════════════════════════════════════════ */
+async function startGame() {
+  const timerEnd = Date.now() + GAME_DURATION_MS;
+
+  await db.ref(`chocolate-rooms/${roomCode}`).update({
+    status: 'playing',
+    timerEnd: timerEnd
+  });
+
+  showPlayingScreen();
+  startHostTimer(timerEnd);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   PLAYING SCREEN
+   ═══════════════════════════════════════════════════════════════ */
+function showPlayingScreen() {
+  renderPlayingGrid();
+  updateSubmissionCounter();
+  showScreen('screen-playing');
+}
+
+function renderPlayingGrid() {
+  const grid = $('playing-grid');
+  grid.innerHTML = '';
+  Object.entries(playersData).forEach(([id, p]) => {
+    const tile = document.createElement('div');
+    tile.className = 'playing-tile' + (p.finalized ? ' finalized' : '');
+    tile.innerHTML = `<span class="check">✓</span><span>${p.name}</span>`;
+    grid.appendChild(tile);
+  });
+}
+
+function updateSubmissionCounter() {
+  const entries = Object.entries(playersData);
+  const total = entries.length;
+  let finalized = 0;
+  entries.forEach(([id, p]) => {
+    if (p.finalized === true) finalized++;
+  });
+  $('sub-count').textContent = finalized;
+  $('sub-total').textContent = total;
+  const pct = total > 0 ? (finalized / total * 100) : 0;
+  $('counter-fill').style.width = pct + '%';
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   HOST COUNTDOWN TIMER
+   ═══════════════════════════════════════════════════════════════ */
+function startHostTimer(timerEnd) {
+  if (hostTimerInterval) clearInterval(hostTimerInterval);
+
+  function tick() {
+    const now = Date.now();
+    const remaining = Math.max(0, Math.ceil((timerEnd - now) / 1000));
+    const min = Math.floor(remaining / 60);
+    const sec = remaining % 60;
+    $('host-timer').textContent = `${min}:${String(sec).padStart(2, '0')}`;
+
+    if (remaining <= 60) {
+      $('host-timer').classList.add('urgent');
+    } else {
+      $('host-timer').classList.remove('urgent');
+    }
+
+    if (remaining <= 0) {
+      clearInterval(hostTimerInterval);
+      hostTimerInterval = null;
+      endGame();
+    }
+  }
+
+  tick();
+  hostTimerInterval = setInterval(tick, 1000);
+}
+
+function stopHostTimer() {
+  if (hostTimerInterval) { clearInterval(hostTimerInterval); hostTimerInterval = null; }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   END GAME
+   ═══════════════════════════════════════════════════════════════ */
+async function endGame() {
+  stopHostTimer();
+  BGMusic.stop();
+  await db.ref(`chocolate-rooms/${roomCode}`).update({ status: 'finished' });
+  // Go to preview screen showing the solution, with "Show Final Results" button
+  $('preview-pin').textContent = roomCode;
+  $('preview-count').textContent = Object.keys(playersData).length;
+  $('btn-start-from-preview').style.display = 'none';
+  $('btn-back-lobby').style.display = 'none';
+  $('btn-show-results').style.display = '';
+  showSolution();
+  showScreen('screen-preview');
+}
+
+async function endGameConfirm() {
+  if (!confirm('End the game now and show final results?')) return;
+  await endGame();
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   FINAL SCREEN
+   ═══════════════════════════════════════════════════════════════ */
+function showFinalScreen() {
+  const sorted = Object.entries(playersData)
+    .map(([id, p]) => ({
+      name: p.name,
+      profit: (p.profit != null) ? p.profit : 0
+    }))
+    .sort((a, b) => b.profit - a.profit);
+
+  // Podium (2nd, 1st, 3rd)
+  const podium = $('podium');
+  podium.innerHTML = '';
+  const medals = ['🥇', '🥈', '🥉'];
+  const podiumOrder = [1, 0, 2]; // display: 2nd, 1st, 3rd
+
+  podiumOrder.forEach(rank => {
+    if (rank >= sorted.length) return;
+    const p = sorted[rank];
+    const place = document.createElement('div');
+    place.className = `podium-place podium-${rank + 1}`;
+    place.innerHTML = `
+      <div class="podium-name">${p.name}</div>
+      <div class="podium-bar">
+        <div class="podium-medal">${medals[rank]}</div>
+        <div class="podium-profit">${formatProfit(p.profit)}</div>
+      </div>
+    `;
+    podium.appendChild(place);
+  });
+
+  // Full leaderboard
+  const lb = $('final-leaderboard');
+  lb.innerHTML = '';
+  sorted.forEach((p, i) => {
+    const row = document.createElement('div');
+    row.className = 'lb-row';
+    if (i === 0) row.classList.add('top-1');
+    else if (i === 1) row.classList.add('top-2');
+    else if (i === 2) row.classList.add('top-3');
+
+    const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i + 1);
+    row.innerHTML = `
+      <div class="lb-rank">${medal}</div>
+      <div class="lb-name">${p.name}</div>
+      <div class="lb-profit">${formatProfit(p.profit)}</div>
+    `;
+    lb.appendChild(row);
+  });
+
+  showScreen('screen-final');
+  spawnConfetti();
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   CLEANUP
+   ═══════════════════════════════════════════════════════════════ */
+async function cleanupRoom() {
+  if (roomCode) {
+    if (playersListener) {
+      db.ref(`chocolate-rooms/${roomCode}/players`).off('value', playersListener);
+      playersListener = null;
+    }
+    await db.ref(`chocolate-rooms/${roomCode}`).remove().catch(() => {});
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   BACKGROUND MUSIC
+   ═══════════════════════════════════════════════════════════════ */
+const BGMusic = (() => {
+  let audio = null, playing = false;
+
+  function init() {
+    if (!audio) {
+      audio = new Audio('https://soundimage.org/wp-content/uploads/2016/12/City-of-Tomorrow_v001_Looping.mp3');
+      audio.loop = true;
+      audio.volume = 0.25;
+    }
+  }
+
+  return {
+    load(file) {
+      const wasPlaying = playing;
+      if (audio) { audio.pause(); }
+      audio = new Audio(URL.createObjectURL(file));
+      audio.loop = true;
+      audio.volume = 0.25;
+      if (wasPlaying) {
+        playing = true;
+        audio.play().catch(() => {});
+      }
+    },
+    start() {
+      init();
+      if (playing) return;
+      playing = true;
+      audio.play().catch(() => {});
+      $('btn-music').textContent = '🎵 Music: ON';
+    },
+    stop() {
+      playing = false;
+      if (audio) { audio.pause(); audio.currentTime = 0; }
+      $('btn-music').textContent = '🎵 Music: OFF';
+    },
+    pause() {
+      if (!playing) return;
+      playing = false;
+      if (audio) audio.pause();
+      $('btn-music').textContent = '🎵 Music: OFF';
+    },
+    resume() {
+      if (playing || !audio) return;
+      playing = true;
+      audio.play().catch(() => {});
+      $('btn-music').textContent = '🎵 Music: ON';
+    },
+    toggle() {
+      if (playing) this.stop(); else this.start();
+    },
+    isPlaying() { return playing; }
+  };
+})();
+
+/* ═══════════════════════════════════════════════════════════════
+   SHOW SOLUTION (replaces iframe with static solution display)
+   ═══════════════════════════════════════════════════════════════ */
+function showSolution() {
+  // Hide iframe, show solution panel
+  $('preview-iframe').style.display = 'none';
+  $('solution-panel').style.display = 'block';
+  renderSolutionChart();
+}
+
+function renderSolutionChart() {
+  // Optimal solution values
+  // Upgrades: cocoa (+5B,+3C) + conch (+4B,+2C) → B_raw=109, C_raw=65
+  // Cost cut 30%: B = 109*(1-0.15)=92.65, C = 65*0.70=45.50
+  // Brand "Maison Noir" ≈ +3 → B = 95.65
+  // Price = 56
+  const RIVAL_B = 100, RIVAL_C = 60, RIVAL_P = 60;
+  const B = 95.65, C = 45.50, P = 56;
+  const csGap = (B - P) - (RIVAL_B - RIVAL_P);
+  const share = 1 / (1 + Math.exp(-0.20 * csGap));
+  const rivalShare = 1 - share;
+
+  const W = 520, H = 300;
+  const PAD_L = 56, PAD_R = 56, PAD_T = 18, PAD_B = 34;
+  const CW = W - PAD_L - PAD_R, CH = H - PAD_T - PAD_B;
+  const Y_MAX = 120, BAR_GAP = 24;
+  const y = v => PAD_T + CH - (Math.max(0, v) / Y_MAX) * CH;
+  const y0 = y(0);
+
+  const barArea = CW - BAR_GAP;
+  const rW = Math.max(30, rivalShare * barArea);
+  const pW = Math.max(30, share * barArea);
+  const rX = PAD_L;
+  const pX = rX + rW + BAR_GAP;
+
+  const parts = [];
+
+  // Y-axis ticks
+  for (const tick of [0, 20, 40, 60, 80, 100]) {
+    const ty = y(tick);
+    parts.push(`<line x1="${PAD_L}" y1="${ty}" x2="${PAD_L + CW}" y2="${ty}" class="sol-tick"/>`);
+    parts.push(`<text x="${PAD_L - 8}" y="${ty + 4}" text-anchor="end" class="sol-legend">${tick}¢</text>`);
+  }
+
+  // Rival bar: cost + consumer surplus
+  const yCostR = y(RIVAL_C), yBenR = y(RIVAL_B);
+  parts.push(`<rect x="${rX}" y="${yCostR}" width="${rW}" height="${y0 - yCostR}" fill="#2b0a06" rx="3"/>`);
+  parts.push(`<rect x="${rX}" y="${yBenR}" width="${rW}" height="${yCostR - yBenR}" fill="#ffc1bd" rx="3"/>`);
+  // Rival label
+  parts.push(`<text x="${rX + rW/2}" y="${y0 + 18}" text-anchor="middle" class="sol-legend">Rivals (${Math.round(rivalShare*100)}%)</text>`);
+
+  // Player bar: cost + profit + consumer surplus
+  const yCostP = y(C), yPriceP = y(P), yBenP = y(B);
+  parts.push(`<rect x="${pX}" y="${yCostP}" width="${pW}" height="${y0 - yCostP}" fill="#2b0a06" rx="3"/>`);
+  parts.push(`<rect x="${pX}" y="${yPriceP}" width="${pW}" height="${yCostP - yPriceP}" fill="#d4a24a" rx="3"/>`);
+  parts.push(`<rect x="${pX}" y="${yBenP}" width="${pW}" height="${yPriceP - yBenP}" fill="#ffc1bd" rx="3"/>`);
+  // Player label
+  parts.push(`<text x="${pX + pW/2}" y="${y0 + 18}" text-anchor="middle" class="sol-legend">You (${Math.round(share*100)}%)</text>`);
+
+  // Baseline
+  parts.push(`<line x1="${PAD_L}" y1="${y0}" x2="${PAD_L + CW}" y2="${y0}" class="sol-tick"/>`);
+
+  $('solution-chart').innerHTML = parts.join('');
+}
+
+function hideSolution() {
+  // Show iframe, hide solution panel
+  $('preview-iframe').style.display = '';
+  $('solution-panel').style.display = 'none';
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   EVENT LISTENERS
+   ═══════════════════════════════════════════════════════════════ */
+$('btn-create').addEventListener('click', createGame);
+$('btn-start').addEventListener('click', startGame);
+$('btn-preview').addEventListener('click', () => {
+  $('preview-pin').textContent = roomCode;
+  $('preview-count').textContent = Object.keys(playersData).length;
+  $('btn-start-from-preview').disabled = Object.keys(playersData).length < 1;
+  $('btn-start-from-preview').style.display = '';
+  $('btn-back-lobby').style.display = '';
+  $('btn-show-results').style.display = 'none';
+  hideSolution();
+  showScreen('screen-preview');
+});
+$('btn-back-lobby').addEventListener('click', () => {
+  showScreen('screen-lobby');
+});
+$('btn-start-from-preview').addEventListener('click', startGame);
+$('btn-show-results').addEventListener('click', showFinalScreen);
+$('btn-end-game').addEventListener('click', endGameConfirm);
+$('btn-music').addEventListener('click', () => BGMusic.toggle());
+$('btn-music-custom').addEventListener('click', () => $('music-file').click());
+$('music-file').addEventListener('change', e => {
+  if (e.target.files[0]) BGMusic.load(e.target.files[0]);
+});
+$('btn-new-game').addEventListener('click', async () => {
+  BGMusic.stop();
+  await cleanupRoom();
+  createGame();
+});
+
+/* ═══════════════════════════════════════════════════════════════
+   AUTO-RECONNECT
+   ═══════════════════════════════════════════════════════════════ */
+(function init() {
+  const savedCode = sessionStorage.getItem('choc_roomCode');
+  const savedHost = sessionStorage.getItem('choc_hostId');
+  if (savedCode && savedHost) {
+    db.ref(`chocolate-rooms/${savedCode}`).once('value').then(snap => {
+      if (snap.exists() && snap.val().hostId === savedHost) {
+        roomCode = savedCode;
+        hostId = savedHost;
+        const data = snap.val();
+
+        listenForPlayers();
+
+        setTimeout(() => {
+          const status = data.status;
+          if (status === 'lobby') {
+            $('room-code').textContent = roomCode;
+            showScreen('screen-lobby');
+          } else if (status === 'playing') {
+            $('room-code').textContent = roomCode;
+            showPlayingScreen();
+            if (data.timerEnd) {
+              const remaining = data.timerEnd - Date.now();
+              if (remaining > 0) {
+                startHostTimer(data.timerEnd);
+              } else {
+                endGame();
+              }
+            }
+          } else if (status === 'finished') {
+            setTimeout(() => showFinalScreen(), 500);
+          }
+        }, 300);
+      } else {
+        sessionStorage.removeItem('choc_roomCode');
+        sessionStorage.removeItem('choc_hostId');
+      }
+    });
+  }
+})();
+
+/* ═══════════════════════════════════════════════════════════════
+   QR CODES
+   ═══════════════════════════════════════════════════════════════ */
+const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(PLAYER_URL)}`;
+$('welcome-qr').src = qrSrc;
+$('lobby-qr').src = qrSrc;
+</script>
+</body>
+</html>
