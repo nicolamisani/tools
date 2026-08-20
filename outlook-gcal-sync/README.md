@@ -8,6 +8,41 @@ deleted in Outlook disappear from Google.
 One-way only. Nothing is ever written back to Outlook.
 
 
+## Status: paused (August 2026)
+
+The service is complete and tested. It is **not** in day-to-day use, because
+neither automatic route into a locked-down Microsoft 365 tenant is open:
+
+- **Published ICS URL** — the tenant's Exchange sharing policy disables calendar
+  publishing, so no feed URL can be created.
+- **Microsoft Graph** — since Microsoft's [secure-by-default consent change][mc]
+  (rolled out late 2025), delegated access to Outlook Calendar requires *admin*
+  consent, for Graph and for the legacy protocols (EWS, ActiveSync, IMAP) alike.
+  A user cannot self-approve it.
+
+That left the uploaded-file route, which works and is shipped — but the export
+end could not be automated. On macOS, Outlook exports `.olm` rather than
+iCalendar, Calendar.app's File → Export is GUI-only with no scriptable
+equivalent, and AppleScript support in current Outlook for Mac is curtailed.
+Exporting and uploading by hand is not worth doing on a schedule, so the project
+is parked rather than finished.
+
+**What would unblock it**, cheapest first:
+
+1. An admin enables calendar publishing for the mailbox — one Exchange sharing
+   policy change. The URL source then works as originally designed.
+2. An admin grants consent for a self-registered Entra app with delegated
+   `Calendars.Read`. Needs a Graph source type, which does not exist yet.
+3. A Windows machine with Outlook desktop — COM automation can export the
+   calendar unattended and `PUT` it to `/api/sources/<id>/upload`, which is
+   already built and token-authenticated.
+
+Everything below describes the working software. `python -m app.check file.ics`
+inspects an export without needing any of the above.
+
+[mc]: https://mc.merill.net/message/MC1163922
+
+
 ## What it does
 
 - Imports a **published Outlook calendar** (`.ics` link) — no Azure app
