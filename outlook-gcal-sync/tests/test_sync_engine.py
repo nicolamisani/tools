@@ -262,3 +262,25 @@ def test_identical_feed_is_skipped_without_calling_google(env, monkeypatch):
 
     assert result.status == "skipped"
     assert service.calls == []
+
+
+def test_expired_google_signin_is_reported_in_plain_language(env, monkeypatch):
+    """A revoked refresh token is the 7-day Testing-mode failure; say so."""
+    db, settings, _, source_id = env
+
+    def expired(*a, **k):
+        raise google_client.NotConnected(
+            "Google sign-in has expired or been revoked - reconnect the "
+            "account from the dashboard. If your OAuth consent screen is "
+            "still in Testing, Google does this every 7 days; publishing "
+            "the app stops it."
+        )
+
+    serve(monkeypatch, SINGLE.format(summary="Kickoff"))
+    monkeypatch.setattr(google_client, "get_service", expired)
+
+    result = run(db, settings, source_id)
+
+    assert result.status == "error"
+    assert "reconnect the account" in result.message
+    assert "RefreshError" not in result.message

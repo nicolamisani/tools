@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -10,6 +11,7 @@ from typing import Any
 # for; without this oauthlib treats that as a scope-change attack and raises.
 os.environ.setdefault("OAUTHLIB_RELAX_TOKEN_SCOPE", "1")
 
+from google.auth.exceptions import RefreshError  # noqa: E402
 from google.auth.transport.requests import Request  # noqa: E402
 from google.oauth2.credentials import Credentials  # noqa: E402
 from google_auth_oauthlib.flow import Flow  # noqa: E402
@@ -19,6 +21,12 @@ from googleapiclient.errors import HttpError  # noqa: E402
 from . import crypto  # noqa: E402
 from .config import Settings  # noqa: E402
 from .db import Database  # noqa: E402
+
+EXPIRED_MESSAGE = (
+    "Google sign-in has expired or been revoked - reconnect the account from "
+    "the dashboard. If your OAuth consent screen is still in Testing, Google "
+    "does this every 7 days; publishing the app stops it."
+)
 
 SCOPES = [
     "https://www.googleapis.com/auth/calendar",
@@ -90,6 +98,16 @@ def load_credentials(db: Database, settings: Settings) -> Credentials:
             "account (the encryption key in DATA_DIR may have been replaced)."
         ) from exc
 
+    expiry = None
+    if data.get("expiry"):
+        try:
+            # google-auth compares expiry against naive UTC.
+            expiry = datetime.fromisoformat(data["expiry"])
+            if expiry.tzinfo is not None:
+                expiry = expiry.astimezone(timezone.utc).replace(tzinfo=None)
+        except ValueError:
+            expiry = None
+
     creds = Credentials(
         token=data.get("token"),
         refresh_token=data.get("refresh_token"),
@@ -97,11 +115,15 @@ def load_credentials(db: Database, settings: Settings) -> Credentials:
         client_id=data.get("client_id") or settings.google_client_id,
         client_secret=data.get("client_secret") or settings.google_client_secret,
         scopes=data.get("scopes") or SCOPES,
+        expiry=expiry,
     )
     if not creds.valid:
         if not creds.refresh_token:
             raise NotConnected("Stored Google credentials have no refresh token.")
-        creds.refresh(Request())
+        try:
+            creds.refresh(Request())
+        except RefreshError as exc:
+            raise NotConnected(EXPIRED_MESSAGE) from exc
         store_credentials(db, settings, creds)
     return creds
 

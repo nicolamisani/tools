@@ -58,10 +58,8 @@ never passes through anyone else's project.
 1. In the [Google Cloud Console](https://console.cloud.google.com/), create a project.
 2. Enable the **Google Calendar API** for it.
 3. Configure the OAuth consent screen as **External**, and add your own Google
-   address under **Test users**. (A personal-use app can stay in "Testing"
-   forever; you do not need verification. Refresh tokens for unverified apps
-   expire after 7 days, so if the app is in testing you will be asked to
-   reconnect weekly — publishing the app to "In production" removes that.)
+   address under **Test users**. Then read *Publishing your OAuth app* below —
+   it decides whether you reconnect weekly or once.
 4. Create credentials → **OAuth client ID** → **Web application**, and add this
    authorised redirect URI:
 
@@ -75,6 +73,29 @@ never passes through anyone else's project.
 Scopes requested: `calendar` (read/write, needed to create the mirror calendar
 and manage its events) and `userinfo.email` (only to show which account is
 connected).
+
+### Publishing your OAuth app
+
+While your consent screen sits in **Testing**, Google revokes refresh tokens
+after **7 days**. The sync then fails until you press *Connect Google account*
+again — the dashboard will say so in as many words.
+
+To stop that, publish the app:
+
+> Google Cloud Console → **APIs & Services → OAuth consent screen** → under
+> *Publishing status*, **Publish app**. (In the newer console this lives under
+> **Google Auth Platform → Audience**.)
+
+This app requests `auth/calendar`, which Google classifies as a **sensitive**
+scope. An unverified app that is published to production shows a "Google hasn't
+verified this app" interstitial the first time you connect — take
+**Advanced → Go to … (unsafe)** to continue — and the project is capped at 100
+authorised users for its lifetime. For a personal instance neither matters.
+Going through Google's verification review is only worth it if you intend to
+hand this to other people.
+
+If publishing turns out to demand more than you want to do, staying in Testing
+costs nothing but a weekly click on *Connect Google account*.
 
 ### 3. Run it
 
@@ -196,6 +217,10 @@ re-published, which mints a new URL. Publish again and update the source.
 consent. Remove the app at
 [myaccount.google.com/permissions](https://myaccount.google.com/permissions)
 and connect again.
+
+**"Google sign-in has expired or been revoked"** — if this shows up roughly
+weekly, your consent screen is still in Testing. See *Publishing your OAuth
+app*. Press **Connect Google account** to resume in the meantime.
 
 **Events are an hour off after a DST change** — an unmapped Windows timezone.
 See the timezone note above.

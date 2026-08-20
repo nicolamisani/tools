@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any, Iterable
 
+from google.auth.exceptions import RefreshError
 from googleapiclient.errors import HttpError
 
 from . import google_client, ics
@@ -403,6 +404,9 @@ def sync_source(
             parts.append(f"{skipped_cancelled} cancelled in Outlook")
         result.message = ", ".join(parts)
 
+    except RefreshError:
+        result.status = "error"
+        result.message = google_client.EXPIRED_MESSAGE
     except (FeedError, SyncError, google_client.NotConnected) as exc:
         result.status = "error"
         result.message = str(exc)
