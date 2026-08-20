@@ -1,40 +1,110 @@
 {% extends "base.html" %}
 {% block title %}{% if source %}Edit calendar{% else %}Add a calendar{% endif %}{% endblock %}
 {% block content %}
-<section class="card">
-  <h1>{% if source %}Edit “{{ source['name'] }}”{% else %}Add an Outlook calendar{% endif %}</h1>
 
-  {% if not source %}
+{% if source and source['source_type'] == 'file' %}
+<section class="card">
+  <h2>Upload a calendar file</h2>
+  <p class="muted small">
+    {% if uploaded_at %}
+      Last upload: {{ uploaded_at.replace('T', ' ') }}.
+    {% else %}
+      Nothing uploaded yet — this source will not sync until you provide a file.
+    {% endif %}
+  </p>
+
+  <form method="post" action="/sources/{{ source['id'] }}/upload"
+        enctype="multipart/form-data" class="inline">
+    <input type="file" name="file" accept=".ics,text/calendar" required>
+    <button class="primary">Upload and sync</button>
+  </form>
+
   <details class="help">
-    <summary>Where do I find the Outlook ICS link?</summary>
-    <ol class="steps">
-      <li>In Outlook on the web, open <strong>Settings → Calendar → Shared calendars</strong>.</li>
-      <li>Under <em>Publish a calendar</em>, pick the calendar and choose
-          <strong>Can view all details</strong> (or <em>Can view when I'm busy</em>
-          if you only want busy blocks).</li>
-      <li>Click <strong>Publish</strong> and copy the <strong>ICS</strong> link — not the HTML one.</li>
-    </ol>
-    <p class="muted small">
-      That link is a secret: anyone holding it can read the calendar. If your
-      workplace has disabled publishing, the option will be greyed out — the
-      alternative is an admin-registered Microsoft Graph app, which this
-      version does not support.
+    <summary>Exporting from a Mac</summary>
+    <p class="small">
+      In <strong>Calendar.app</strong>, select the calendar in the sidebar, then
+      <strong>File → Export → Export…</strong>. That writes one <code>.ics</code>
+      containing the whole calendar, which is what this source expects.
+    </p>
+    <p class="small muted">
+      Outlook for Mac's own File → Export produces a <code>.olm</code> archive,
+      which is not iCalendar and will be rejected.
     </p>
   </details>
-  {% endif %}
+
+  <details class="help">
+    <summary>Uploading from a script instead</summary>
+    <p class="small">Push the same file over HTTP to automate this:</p>
+    <code class="block">curl -T calendar.ics \
+  -H "Authorization: Bearer {{ source['push_token'] }}" \
+  {{ push_url }}</code>
+    <p class="small muted">
+      Each upload triggers a sync. Treat this token like a password — it allows
+      writing to the Google calendar this source owns.
+    </p>
+    <form method="post" action="/sources/{{ source['id'] }}/token"
+          onsubmit="return confirm('Issue a new token? Any script using the old one will stop working.')">
+      <button>Regenerate token</button>
+    </form>
+  </details>
+</section>
+{% endif %}
+
+<section class="card">
+  <h1>{% if source %}Edit “{{ source['name'] }}”{% else %}Add an Outlook calendar{% endif %}</h1>
 
   <form method="post" action="{% if source %}/sources/{{ source['id'] }}{% else %}/sources{% endif %}">
     <label for="name">Name</label>
     <input id="name" name="name" required placeholder="Work calendar"
            value="{{ source['name'] if source else '' }}">
 
-    <label for="ics_url">Published ICS URL</label>
-    <input id="ics_url" name="ics_url" required
-           placeholder="https://outlook.office365.com/owa/calendar/…/calendar.ics"
-           value="{{ source['ics_url'] if source else '' }}">
-    <div class="inline">
-      <button type="button" class="secondary" id="test-btn">Test this link</button>
-      <span id="test-result" class="muted small"></span>
+    <label for="source_type">Where the calendar comes from</label>
+    <select id="source_type" name="source_type">
+      <option value="url" {% if not source or source['source_type'] == 'url' %}selected{% endif %}>
+        A published URL — fetched automatically on a schedule
+      </option>
+      <option value="file" {% if source and source['source_type'] == 'file' %}selected{% endif %}>
+        An uploaded .ics file — you or a script provide it
+      </option>
+    </select>
+
+    <div id="url-fields">
+      <label for="ics_url">Published ICS URL</label>
+      <input id="ics_url" name="ics_url"
+             placeholder="https://outlook.office365.com/owa/calendar/…/calendar.ics"
+             value="{{ source['ics_url'] if source else '' }}">
+      <div class="inline">
+        <button type="button" class="secondary" id="test-btn">Test this link</button>
+        <span id="test-result" class="muted small"></span>
+      </div>
+      <details class="help">
+        <summary>Where do I find the Outlook ICS link?</summary>
+        <ol class="steps">
+          <li>In Outlook on the web, open <strong>Settings → Calendar → Shared calendars</strong>.</li>
+          <li>Under <em>Publish a calendar</em>, pick the calendar and choose
+              <strong>Can view all details</strong>.</li>
+          <li>Click <strong>Publish</strong> and copy the <strong>ICS</strong> link — not the HTML one.</li>
+        </ol>
+        <p class="muted small">
+          If publishing is greyed out, your administrator has disabled it — use
+          the uploaded-file option instead.
+        </p>
+      </details>
+    </div>
+
+    <div id="file-note" class="help">
+      <p class="small">
+        {% if source %}
+          Upload files using the panel above, or push them from a script.
+        {% else %}
+          Save this source first, then you'll get an upload box and a push token.
+        {% endif %}
+      </p>
+      <p class="small muted">
+        Because an exported file can be incomplete in a way a published URL never
+        is, a sync that would remove a large share of this calendar pauses for
+        confirmation instead of deleting.
+      </p>
     </div>
 
     <label for="target_calendar_id">Import into</label>
@@ -94,20 +164,28 @@
     </label>
 
     <div class="actions">
-      <button class="primary" type="submit">{% if source %}Save changes{% else %}Add and sync{% endif %}</button>
+      <button class="primary" type="submit">{% if source %}Save changes{% else %}Add calendar{% endif %}</button>
       <a class="button" href="/">Cancel</a>
     </div>
   </form>
 </section>
 
 <script>
-  const select = document.getElementById('target_calendar_id');
+  const calSelect = document.getElementById('target_calendar_id');
   const newRow = document.getElementById('new-cal-row');
-  const toggleNewRow = () => {
-    newRow.style.display = select.value === '__new__' ? 'block' : 'none';
+  const typeSelect = document.getElementById('source_type');
+  const urlFields = document.getElementById('url-fields');
+  const fileNote = document.getElementById('file-note');
+
+  const sync = () => {
+    newRow.style.display = calSelect.value === '__new__' ? 'block' : 'none';
+    const isFile = typeSelect.value === 'file';
+    urlFields.style.display = isFile ? 'none' : 'block';
+    fileNote.style.display = isFile ? 'block' : 'none';
   };
-  select.addEventListener('change', toggleNewRow);
-  toggleNewRow();
+  calSelect.addEventListener('change', sync);
+  typeSelect.addEventListener('change', sync);
+  sync();
 
   document.getElementById('test-btn').addEventListener('click', async () => {
     const out = document.getElementById('test-result');

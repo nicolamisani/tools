@@ -29,11 +29,64 @@ TAG_SOURCE = "ocsync_source"
 TAG_UID = "ocsync_uid"
 TAG_HASH = "ocsync_hash"
 BUSY_TITLE = "Busy"
+# A hand-exported file can be truncated in a way a published URL never is.
+# Refuse to act on a suspicious shrink until a human confirms it.
+DELETE_GUARD_MIN_EVENTS = 5
+DELETE_GUARD_FRACTION = 0.25
 RETRY_STATUSES = {403, 429, 500, 502, 503, 504}
 
 
 class SyncError(RuntimeError):
     pass
+
+
+@dataclass
+class Feed:
+    """Calendar bytes for a source, however they were obtained."""
+
+    body: bytes | None = None
+    etag: str = ""
+    last_modified: str = ""
+    skipped: str = ""  # non-empty means there is nothing to do
+
+
+def load_feed(settings: Settings, source: sqlite3.Row, force: bool) -> Feed:
+    """Read the calendar from an uploaded file or a published URL."""
+    if source["source_type"] == "file":
+        path = settings.upload_path(int(source["id"]))
+        if not path.exists():
+            return Feed(
+                skipped="No calendar file has been uploaded for this source yet."
+            )
+        return Feed(body=path.read_bytes())
+
+    fetched = ics.fetch_feed(
+        source["ics_url"],
+        etag="" if force else source["http_etag"],
+        last_modified="" if force else source["http_last_modified"],
+    )
+    if fetched.not_modified:
+        return Feed(
+            etag=fetched.etag,
+            last_modified=fetched.last_modified,
+            skipped="Feed unchanged since the last run (HTTP 304).",
+        )
+    return Feed(
+        body=fetched.body or b"",
+        etag=fetched.etag,
+        last_modified=fetched.last_modified,
+    )
+
+
+def deletion_needs_confirmation(
+    source: sqlite3.Row, existing_count: int, stale_count: int
+) -> bool:
+    """Whether this run removes enough events to look like a bad export."""
+    if source["source_type"] != "file" or not stale_count:
+        return False
+    if existing_count < DELETE_GUARD_MIN_EVENTS:
+        return False
+    return stale_count / existing_count > DELETE_GUARD_FRACTION
 
 
 @dataclass
@@ -248,7 +301,11 @@ def _apply_override(
 
 
 def sync_source(
-    db: Database, settings: Settings, source: sqlite3.Row, force: bool = False
+    db: Database,
+    settings: Settings,
+    source: sqlite3.Row,
+    force: bool = False,
+    confirm_deletions: bool = False,
 ) -> RunResult:
     """Run one source end to end and record the outcome."""
     source_id = int(source["id"])
@@ -256,26 +313,22 @@ def sync_source(
     result = RunResult()
 
     try:
-        fetched = ics.fetch_feed(
-            source["ics_url"],
-            etag="" if force else source["http_etag"],
-            last_modified="" if force else source["http_last_modified"],
-        )
-        if fetched.not_modified:
+        feed = load_feed(settings, source, force)
+        if feed.skipped:
             result.status = "skipped"
-            result.message = "Feed unchanged since the last run (HTTP 304)."
+            result.message = feed.skipped
             db.finish_run(run_id, **_run_fields(result))
             return result
 
-        parsed = ics.parse_calendar(fetched.body or b"")
+        parsed = ics.parse_calendar(feed.body or b"")
         if not force and parsed.body_hash == source["content_hash"]:
             db.update_source(
                 source_id,
-                http_etag=fetched.etag,
-                http_last_modified=fetched.last_modified,
+                http_etag=feed.etag,
+                http_last_modified=feed.last_modified,
             )
             result.status = "skipped"
-            result.message = "Feed contents identical to the last run."
+            result.message = "Calendar contents identical to the last run."
             db.finish_run(run_id, **_run_fields(result))
             return result
 
@@ -361,18 +414,29 @@ def sync_source(
                 result.updated += 1
                 result.note(f"~ {event.summary or uid}")
 
-        for event_id, item in existing.items():
-            if event_id in desired_ids:
-                continue
-            try:
-                _execute(
-                    service.events().delete(calendarId=calendar_id, eventId=event_id)
-                )
-                result.deleted += 1
-                result.note(f"- {item.get('summary', event_id)}")
-            except HttpError as exc:
-                if getattr(exc.resp, "status", 0) not in (404, 410):
-                    raise
+        stale = [eid for eid in existing if eid not in desired_ids]
+        held_back = 0
+        if not confirm_deletions and deletion_needs_confirmation(
+            source, len(existing), len(stale)
+        ):
+            held_back = len(stale)
+            share = round(100 * len(stale) / len(existing))
+            result.note(
+                f"! held back {held_back} deletions ({share}% of this calendar)"
+            )
+        else:
+            for event_id in stale:
+                try:
+                    _execute(
+                        service.events().delete(
+                            calendarId=calendar_id, eventId=event_id
+                        )
+                    )
+                    result.deleted += 1
+                    result.note(f"- {existing[event_id].get('summary', event_id)}")
+                except HttpError as exc:
+                    if getattr(exc.resp, "status", 0) not in (404, 410):
+                        raise
 
         for override in overrides:
             master = masters.get(override.uid)
@@ -390,9 +454,11 @@ def sync_source(
 
         db.update_source(
             source_id,
-            http_etag=fetched.etag,
-            http_last_modified=fetched.last_modified,
-            content_hash=parsed.body_hash,
+            http_etag=feed.etag,
+            http_last_modified=feed.last_modified,
+            # A held-back run is not a faithful copy of the file, so don't
+            # record its hash -- the next run must re-evaluate.
+            content_hash="" if held_back else parsed.body_hash,
         )
 
         parts = [
@@ -403,6 +469,16 @@ def sync_source(
         if skipped_cancelled:
             parts.append(f"{skipped_cancelled} cancelled in Outlook")
         result.message = ", ".join(parts)
+
+        if held_back:
+            result.status = "blocked"
+            share = round(100 * held_back / len(existing))
+            result.message = (
+                f"Held back {held_back} deletions — the uploaded file is missing "
+                f"{share}% of the events previously synced. If that is intended, "
+                f"choose “Apply deletions”. Otherwise re-export a complete "
+                f"calendar and upload it again. ({result.message})"
+            )
 
     except RefreshError:
         result.status = "error"

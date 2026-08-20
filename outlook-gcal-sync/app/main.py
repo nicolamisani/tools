@@ -9,7 +9,16 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from fastapi import BackgroundTasks, Depends, FastAPI, Form, HTTPException, Request
+from fastapi import (
+    BackgroundTasks,
+    Depends,
+    FastAPI,
+    File,
+    Form,
+    HTTPException,
+    Request,
+    UploadFile,
+)
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -17,7 +26,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from . import google_client, ics, sync
 from .config import settings
-from .db import Database
+from .db import Database, utcnow
 from .scheduler import SyncScheduler, sync_lock
 
 logging.basicConfig(
@@ -128,6 +137,43 @@ def _calendars_or_empty() -> list[dict[str, Any]]:
     except Exception as exc:
         log.warning("could not list calendars: %s", exc)
         return []
+
+
+def _new_push_token() -> str:
+    return "ocs_" + secrets.token_urlsafe(24)
+
+
+def _store_upload(source_id: int, raw: bytes) -> int:
+    """Validate an .ics upload and swap it in atomically. Returns event count."""
+    if not raw:
+        raise ValueError("The uploaded file was empty.")
+    if len(raw) > ics.MAX_FEED_BYTES:
+        raise ValueError(
+            f"File is larger than {ics.MAX_FEED_BYTES // 1024 // 1024} MB."
+        )
+    if b"BEGIN:VCALENDAR" not in raw[:4096]:
+        raise ValueError(
+            "That is not an iCalendar export. In Calendar.app use "
+            "File → Export → Export to produce a .ics file."
+        )
+    parsed = ics.parse_calendar(raw)  # raises FeedError on malformed input
+
+    settings.upload_dir.mkdir(parents=True, exist_ok=True)
+    path = settings.upload_path(source_id)
+    staging = path.with_suffix(".part")
+    staging.write_bytes(raw)
+    staging.replace(path)  # atomic: a half-written file can never be synced
+    db.update_source(source_id, uploaded_at=utcnow())
+    return len([event for event in parsed.events if not event.is_override])
+
+
+def _source_from_bearer(request: Request):
+    header = request.headers.get("Authorization", "")
+    token = header[7:].strip() if header[:7].lower() == "bearer " else ""
+    source = db.source_for_token(token)
+    if source is None:
+        raise HTTPException(401, "Invalid or missing push token.")
+    return source
 
 
 def _source_view(row) -> dict[str, Any]:
@@ -254,6 +300,9 @@ def edit_source(request: Request, source_id: int, _: None = Depends(auth_require
         {
             "source": source,
             "calendars": _calendars_or_empty(),
+            "push_url": f"{settings.base_url.rstrip('/')}"
+            f"/api/sources/{source_id}/upload",
+            "uploaded_at": source["uploaded_at"],
             "flash": _take_flash(request),
         },
     )
@@ -261,6 +310,7 @@ def edit_source(request: Request, source_id: int, _: None = Depends(auth_require
 
 def _clean_source_form(
     name: str,
+    source_type: str,
     ics_url: str,
     target_calendar_id: str,
     new_calendar_name: str,
@@ -270,11 +320,15 @@ def _clean_source_form(
     enabled: str | None,
     reminders: str | None,
 ) -> dict[str, Any]:
+    source_type = "file" if source_type == "file" else "url"
     ics_url = ics_url.strip()
-    if ics_url.startswith("webcal://"):
-        ics_url = "https://" + ics_url[len("webcal://") :]
-    if not ics_url.startswith(("http://", "https://")):
-        raise ValueError("The calendar URL must start with https:// or webcal://")
+    if source_type == "url":
+        if ics_url.startswith("webcal://"):
+            ics_url = "https://" + ics_url[len("webcal://") :]
+        if not ics_url.startswith(("http://", "https://")):
+            raise ValueError("The calendar URL must start with https:// or webcal://")
+    else:
+        ics_url = ""
     if privacy not in ("full", "busy"):
         privacy = "full"
 
@@ -288,6 +342,7 @@ def _clean_source_form(
 
     return {
         "name": name.strip() or "Outlook calendar",
+        "source_type": source_type,
         "ics_url": ics_url,
         "target_calendar_id": target_calendar_id,
         "privacy": privacy,
@@ -303,6 +358,7 @@ def create_source(
     request: Request,
     background: BackgroundTasks,
     name: str = Form(""),
+    source_type: str = Form("url"),
     ics_url: str = Form(""),
     target_calendar_id: str = Form(""),
     new_calendar_name: str = Form(""),
@@ -315,12 +371,18 @@ def create_source(
 ):
     try:
         fields = _clean_source_form(
-            name, ics_url, target_calendar_id, new_calendar_name, privacy,
-            past_days, future_days, enabled, reminders,
+            name, source_type, ics_url, target_calendar_id, new_calendar_name,
+            privacy, past_days, future_days, enabled, reminders,
         )
     except Exception as exc:
         _flash(request, str(exc), "error")
         return RedirectResponse("/sources/new", status_code=303)
+
+    if fields["source_type"] == "file":
+        fields["push_token"] = _new_push_token()
+        source_id = db.create_source(**fields)
+        _flash(request, f"Added “{fields['name']}”. Upload an .ics file to start.")
+        return RedirectResponse(f"/sources/{source_id}/edit", status_code=303)
 
     source_id = db.create_source(**fields)
     _flash(request, f"Added “{fields['name']}”. First sync is running now.")
@@ -333,6 +395,7 @@ def update_source(
     request: Request,
     source_id: int,
     name: str = Form(""),
+    source_type: str = Form("url"),
     ics_url: str = Form(""),
     target_calendar_id: str = Form(""),
     new_calendar_name: str = Form(""),
@@ -347,8 +410,8 @@ def update_source(
         raise HTTPException(404, "No such source")
     try:
         fields = _clean_source_form(
-            name, ics_url, target_calendar_id, new_calendar_name, privacy,
-            past_days, future_days, enabled, reminders,
+            name, source_type, ics_url, target_calendar_id, new_calendar_name,
+            privacy, past_days, future_days, enabled, reminders,
         )
     except Exception as exc:
         _flash(request, str(exc), "error")
@@ -356,6 +419,9 @@ def update_source(
 
     # Settings changed: force a full re-evaluation on the next run.
     fields.update(http_etag="", http_last_modified="", content_hash="")
+    existing = db.get_source(source_id)
+    if fields["source_type"] == "file" and not existing["push_token"]:
+        fields["push_token"] = _new_push_token()
     db.update_source(source_id, **fields)
     _flash(request, "Source updated.")
     return RedirectResponse("/", status_code=303)
@@ -378,14 +444,22 @@ def delete_source(request: Request, source_id: int, _: None = Depends(auth_requi
 # --- running the sync -------------------------------------------------------
 
 
-def _run_sync(source_id: int | None, force: bool) -> None:
+def _run_sync(
+    source_id: int | None, force: bool, confirm_deletions: bool = False
+) -> None:
     with sync_lock:
         if source_id is None:
             sync.sync_all(db, settings, force=force)
             return
         source = db.get_source(source_id)
         if source is not None:
-            sync.sync_source(db, settings, source, force=force)
+            sync.sync_source(
+                db,
+                settings,
+                source,
+                force=force,
+                confirm_deletions=confirm_deletions,
+            )
 
 
 @app.post("/sources/{source_id}/sync")
@@ -393,13 +467,71 @@ def sync_one(
     request: Request,
     source_id: int,
     background: BackgroundTasks,
+    confirm: str | None = Form(None),
     _: None = Depends(auth_required),
 ):
     if db.get_source(source_id) is None:
         raise HTTPException(404, "No such source")
-    background.add_task(_run_sync, source_id, True)
-    _flash(request, "Sync started — refresh in a moment for the result.")
+    background.add_task(_run_sync, source_id, True, bool(confirm))
+    _flash(
+        request,
+        "Applying held-back deletions…" if confirm
+        else "Sync started — refresh in a moment for the result.",
+    )
     return RedirectResponse("/", status_code=303)
+
+
+# --- uploads ----------------------------------------------------------------
+
+
+@app.post("/sources/{source_id}/upload")
+async def upload_from_browser(
+    request: Request,
+    source_id: int,
+    background: BackgroundTasks,
+    file: UploadFile = File(...),
+    _: None = Depends(auth_required),
+):
+    if db.get_source(source_id) is None:
+        raise HTTPException(404, "No such source")
+    try:
+        count = _store_upload(source_id, await file.read())
+    except (ValueError, ics.FeedError) as exc:
+        _flash(request, str(exc), "error")
+        return RedirectResponse(f"/sources/{source_id}/edit", status_code=303)
+
+    background.add_task(_run_sync, source_id, True)
+    _flash(request, f"Uploaded {count} events. Syncing now.")
+    return RedirectResponse("/", status_code=303)
+
+
+@app.api_route("/api/sources/{source_id}/upload", methods=["PUT", "POST"])
+async def upload_from_script(
+    request: Request, source_id: int, background: BackgroundTasks
+):
+    """Push endpoint for scripts. Authenticated by the source's push token."""
+    source = _source_from_bearer(request)
+    if int(source["id"]) != source_id:
+        raise HTTPException(403, "That token belongs to a different source.")
+    try:
+        count = _store_upload(source_id, await request.body())
+    except (ValueError, ics.FeedError) as exc:
+        raise HTTPException(400, str(exc))
+
+    background.add_task(_run_sync, source_id, True)
+    return {"ok": True, "events": count, "sync": "started"}
+
+
+@app.post("/sources/{source_id}/token")
+def regenerate_token(
+    request: Request, source_id: int, _: None = Depends(auth_required)
+):
+    source = db.get_source(source_id)
+    if source is None:
+        raise HTTPException(404, "No such source")
+    db.update_source(source_id, push_token=_new_push_token())
+    _flash(request, "New push token issued. The previous one no longer works.")
+    return RedirectResponse(f"/sources/{source_id}/edit", status_code=303)
 
 
 @app.post("/sync")

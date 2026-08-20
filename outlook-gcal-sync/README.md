@@ -12,6 +12,8 @@ One-way only. Nothing is ever written back to Outlook.
 
 - Imports a **published Outlook calendar** (`.ics` link) — no Azure app
   registration, no admin consent, works with outlook.com and most work accounts.
+- Or takes an **uploaded `.ics` file**, for locked-down tenants where publishing
+  is disabled. Drop it in the browser, or push it from a script.
 - Writes into a **calendar it creates and owns**, so your existing Google events
   are never touched. Every event it writes carries a private tag; anything
   untagged is left alone, always.
@@ -32,8 +34,11 @@ One-way only. Nothing is ever written back to Outlook.
   attendee data, and copying it would send invitations from your Google account.
 - No attachments or embedded meeting join buttons. Teams/Zoom links inside the
   description survive as text.
-- If your organisation has disabled calendar publishing, this approach cannot
-  work at all; you would need a Microsoft Graph app registered by an admin.
+- If your organisation has disabled calendar publishing, the URL route is
+  closed. Use the uploaded-file source instead — see *If publishing is
+  disabled* below. (Microsoft Graph is not an escape hatch here: since late
+  2025 its default consent policy requires an admin to approve third-party
+  access to Outlook Calendar, via Graph *and* the legacy protocols.)
 
 ---
 
@@ -107,6 +112,48 @@ docker compose up -d
 
 Open <http://localhost:8080>, sign in, and click **Connect Google account**.
 
+### If publishing is disabled
+
+Many Microsoft 365 tenants switch calendar publishing off, which greys out the
+option in Outlook. In that case add the calendar as an **uploaded file** source
+instead: it needs no tenant permissions at all, because you export the data
+yourself with a client you are already signed in to.
+
+**Exporting on a Mac.** Open **Calendar.app**, select the calendar in the
+sidebar, then **File → Export → Export…**. That writes a single `.ics` holding
+the whole calendar.
+
+> Outlook for Mac's own File → Export produces a `.olm` archive, which is not
+> iCalendar and will be rejected. Calendar.app's **Calendar Archive** (`.icbu`)
+> is likewise not an `.ics` — take *Export*, not *Archive*.
+
+**Getting the file in.** Either drop it on the source's page in the browser, or
+push it over HTTP with the token shown there:
+
+```bash
+curl -T calendar.ics \
+  -H "Authorization: Bearer ocs_…" \
+  http://localhost:8080/api/sources/1/upload
+```
+
+Every upload triggers a sync. Anything on your machine that can produce an
+`.ics` and run a command — a launchd job, an Automator action, a Shortcut — can
+therefore keep this current without you touching the browser. The scheduler is
+irrelevant for these sources: re-running against an unchanged file does nothing,
+so the upload *is* the trigger.
+
+> **Note:** this is not the same as Google Calendar's own *Import* button, and
+> the app's tolerance for a file is not Google's. The app parses the `.ics`
+> itself and creates events through the API, so exports that Google's importer
+> rejects can still sync fine here.
+
+**The truncation guard.** A published URL is always a complete snapshot; a
+hand-made export may not be. So for file sources, a run that would remove more
+than a quarter of the events it previously wrote stops and reports `blocked`
+instead of deleting — additions and edits are still applied. If the shrink was
+intentional, press **Apply deletions**; if it was a partial export, upload a
+complete file and the block clears itself.
+
 ### 4. Add your calendar
 
 **Add a calendar** → paste the ICS link → **Test this link** to confirm it
@@ -150,9 +197,11 @@ pytest -q
 ```
 
 The suite covers ICS parsing (all-day events, `DURATION` without `DTEND`,
-Windows timezone names, recurrence rules and exceptions) and the sync engine
-against an in-memory stand-in for the Calendar API — including that events it
-did not create are never deleted.
+Windows timezone names, recurrence rules and exceptions), a realistic
+Apple Calendar export fixture (VTIMEZONE, VALARM, `X-APPLE-*` properties,
+folded lines, escaped text), and the sync engine against an in-memory stand-in
+for the Calendar API — including that events it did not create are never
+deleted, and that a truncated upload cannot wipe a calendar.
 
 ---
 

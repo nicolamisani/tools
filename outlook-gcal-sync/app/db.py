@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import secrets
 import sqlite3
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -17,7 +18,10 @@ CREATE TABLE IF NOT EXISTS setting (
 CREATE TABLE IF NOT EXISTS source (
     id                INTEGER PRIMARY KEY AUTOINCREMENT,
     name              TEXT    NOT NULL,
-    ics_url           TEXT    NOT NULL,
+    source_type       TEXT    NOT NULL DEFAULT 'url',   -- url | file
+    ics_url           TEXT    NOT NULL DEFAULT '',
+    push_token        TEXT    NOT NULL DEFAULT '',
+    uploaded_at       TEXT    NOT NULL DEFAULT '',
     target_calendar_id TEXT   NOT NULL DEFAULT '',
     privacy           TEXT    NOT NULL DEFAULT 'full',   -- full | busy
     past_days         INTEGER NOT NULL DEFAULT 30,
@@ -64,11 +68,25 @@ class Database:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.connect() as conn:
             conn.executescript(SCHEMA)
+            self._migrate(conn)
             for key, value in DEFAULT_SETTINGS.items():
                 conn.execute(
                     "INSERT OR IGNORE INTO setting (key, value) VALUES (?, ?)",
                     (key, value),
                 )
+
+    @staticmethod
+    def _migrate(conn: sqlite3.Connection) -> None:
+        """Add columns introduced after a database was first created."""
+        existing = {row["name"] for row in conn.execute("PRAGMA table_info(source)")}
+        added = (
+            ("source_type", "TEXT NOT NULL DEFAULT 'url'"),
+            ("push_token", "TEXT NOT NULL DEFAULT ''"),
+            ("uploaded_at", "TEXT NOT NULL DEFAULT ''"),
+        )
+        for name, ddl in added:
+            if name not in existing:
+                conn.execute(f"ALTER TABLE source ADD COLUMN {name} {ddl}")
 
     @contextmanager
     def connect(self) -> Iterator[sqlite3.Connection]:
@@ -107,6 +125,19 @@ class Database:
             return conn.execute(
                 "SELECT * FROM source WHERE id = ?", (source_id,)
             ).fetchone()
+
+    def source_for_token(self, token: str) -> sqlite3.Row | None:
+        """Look up a file source by its push token (constant-time compare)."""
+        if not token:
+            return None
+        with self.connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM source WHERE source_type = 'file' AND push_token != ''"
+            ).fetchall()
+        for row in rows:
+            if secrets.compare_digest(row["push_token"], token):
+                return row
+        return None
 
     def create_source(self, **fields: Any) -> int:
         fields.setdefault("created_at", utcnow())

@@ -142,6 +142,7 @@ td.nums { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .badge.ok { background: color-mix(in srgb, var(--ok) 18%, transparent); color: var(--ok); }
 .badge.error { background: color-mix(in srgb, var(--err) 18%, transparent); color: var(--err); }
 .badge.skipped, .badge.running, .badge.off { color: var(--muted); }
+.badge.blocked { background: color-mix(in srgb, var(--warn) 20%, transparent); color: var(--warn); }
 
 .flash { padding: 12px 14px; border-radius: var(--radius); margin-bottom: 18px; border: 1px solid var(--line); }
 .flash-ok { border-color: var(--ok); color: var(--ok); }

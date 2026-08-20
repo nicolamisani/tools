@@ -37,6 +37,13 @@ class Settings:
     def key_path(self) -> Path:
         return self.data_dir / "secret.key"
 
+    @property
+    def upload_dir(self) -> Path:
+        return self.data_dir / "uploads"
+
+    def upload_path(self, source_id: int) -> Path:
+        return self.upload_dir / f"source-{source_id}.ics"
+
 
 def load_settings() -> Settings:
     data_dir = Path(os.environ.get("DATA_DIR", "./data")).expanduser().resolve()
