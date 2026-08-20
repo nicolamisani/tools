@@ -185,6 +185,29 @@ class ParsedCalendar:
     events: list[ParsedEvent]
     default_tz: str | None
     body_hash: str
+    prodid: str = ""
+    name: str = ""
+    description: str = ""
+
+
+def looks_like_google_calendar(
+    parsed: "ParsedCalendar", account_email: str = ""
+) -> str:
+    """Say why a file appears to be an export of a Google calendar, or "".
+
+    Round-tripping a Google calendar back into Google duplicates everything,
+    and it is an easy mistake: in a Mac Calendar sidebar the Google and
+    Exchange accounts sit side by side.
+    """
+    if "google" in parsed.prodid.lower():
+        return "it was produced by Google"
+    needle = account_email.strip().lower()
+    if needle:
+        if needle in (parsed.description or "").lower():
+            return f"it is described as “{account_email}”"
+        if needle in (parsed.name or "").lower():
+            return f"it is named after “{account_email}”"
+    return ""
 
 
 def _text(comp, name: str) -> str:
@@ -291,7 +314,14 @@ def parse_calendar(body: bytes | str) -> ParsedCalendar:
             )
         )
 
-    return ParsedCalendar(events=events, default_tz=default_tz, body_hash=body_hash)
+    return ParsedCalendar(
+        events=events,
+        default_tz=default_tz,
+        body_hash=body_hash,
+        prodid=_text(cal, "PRODID"),
+        name=_text(cal, "X-WR-CALNAME"),
+        description=_text(cal, "X-WR-CALDESC"),
+    )
 
 
 @dataclass

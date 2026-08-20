@@ -147,6 +147,13 @@ so the upload *is* the trigger.
 > itself and creates events through the API, so exports that Google's importer
 > rejects can still sync fine here.
 
+**Picking the right calendar.** In the Calendar.app sidebar your Google and
+Exchange accounts sit next to each other, and exporting the wrong one is easy.
+An upload that looks like an export of the Google account you connected is
+rejected rather than synced — round-tripping it would duplicate your whole
+calendar into itself. If you want to check a file by hand, look at its header:
+`X-WR-CALNAME` and `X-WR-CALDESC` name the calendar it came from.
+
 **The truncation guard.** A published URL is always a complete snapshot; a
 hand-made export may not be. So for file sources, a run that would remove more
 than a quarter of the events it previously wrote stops and reports `blocked`

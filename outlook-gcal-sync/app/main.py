@@ -158,6 +158,15 @@ def _store_upload(source_id: int, raw: bytes) -> int:
         )
     parsed = ics.parse_calendar(raw)  # raises FeedError on malformed input
 
+    reason = ics.looks_like_google_calendar(parsed, db.get_setting("google_email"))
+    if reason:
+        raise ValueError(
+            f"This looks like an export of your Google calendar rather than your "
+            f"Outlook one — {reason}. Syncing it would copy your Google events "
+            f"back into Google. In Calendar.app, select the Outlook/Exchange "
+            f"calendar in the sidebar before exporting."
+        )
+
     settings.upload_dir.mkdir(parents=True, exist_ok=True)
     path = settings.upload_path(source_id)
     staging = path.with_suffix(".part")
