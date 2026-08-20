@@ -147,6 +147,21 @@ so the upload *is* the trigger.
 > itself and creates events through the API, so exports that Google's importer
 > rejects can still sync fine here.
 
+**Checking a file before you upload it.** The app ships a preflight command
+that reads a file exactly as the sync engine would, without needing Google
+credentials, a database or any configuration:
+
+```bash
+python -m app.check ~/Desktop/work.ics --account you@gmail.com
+# or, with only Docker:
+docker compose run --rm -v "$PWD:/host" sync python -m app.check /host/work.ics
+```
+
+It reports which calendar the file came from, how many events and recurring
+series it holds, how many fall inside your sync window, and whether anything
+looks wrong — exiting non-zero if so. Event titles are withheld unless you pass
+`--sample N`, so the output is safe to paste when asking for help.
+
 **Picking the right calendar.** In the Calendar.app sidebar your Google and
 Exchange accounts sit next to each other, and exporting the wrong one is easy.
 An upload that looks like an export of the Google account you connected is
@@ -290,7 +305,8 @@ scheduler logs its interval on startup and every run's outcome.
 app/
   main.py           FastAPI routes, OAuth callback, web UI
   sync.py           the sync engine (diffing, upserts, deletions)
-  ics.py            feed fetching and iCalendar parsing
+  ics.py            feed fetching, iCalendar parsing, window filtering
+  check.py          preflight CLI for inspecting an .ics file
   google_client.py  OAuth handling and Calendar API helpers
   db.py             SQLite schema and queries
   scheduler.py      APScheduler interval job

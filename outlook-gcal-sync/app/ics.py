@@ -324,6 +324,33 @@ def parse_calendar(body: bytes | str) -> ParsedCalendar:
     )
 
 
+def _rrule_until(lines: Iterable[str]) -> datetime | None:
+    for line in lines:
+        if not line.upper().startswith("RRULE"):
+            continue
+        for part in line.split(":", 1)[-1].split(";"):
+            key, _, value = part.partition("=")
+            if key.strip().upper() != "UNTIL":
+                continue
+            raw = value.strip()
+            for fmt in ("%Y%m%dT%H%M%SZ", "%Y%m%dT%H%M%S", "%Y%m%d"):
+                try:
+                    return datetime.strptime(raw, fmt).replace(tzinfo=timezone.utc)
+                except ValueError:
+                    continue
+    return None
+
+
+def in_window(event: ParsedEvent, start: datetime, end: datetime) -> bool:
+    """Whether an event (or recurring series) overlaps the sync window."""
+    if event.is_recurring_master:
+        if event.start.as_utc() > end:
+            return False
+        until = _rrule_until(event.recurrence)
+        return until is None or until >= start
+    return event.end.as_utc() >= start and event.start.as_utc() <= end
+
+
 @dataclass
 class FetchResult:
     body: bytes | None            # None when the server answered 304
