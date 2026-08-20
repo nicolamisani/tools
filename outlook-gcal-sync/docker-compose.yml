@@ -1,0 +1,15 @@
+services:
+  sync:
+    build: .
+    image: outlook-gcal-sync
+    container_name: outlook-gcal-sync
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATA_DIR: /data
+    # Bound to localhost by default. Change to "8080:8080" only once
+    # APP_PASSWORD is set, or put it behind a reverse proxy with TLS.
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - ./data:/data

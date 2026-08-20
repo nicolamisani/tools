@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% block content %}
+
+{% if not password_set %}
+<div class="flash flash-warn">
+  <strong>No password set.</strong> Anyone who can reach this page can read your
+  calendar settings and trigger syncs. Set <code>APP_PASSWORD</code> unless the
+  app is bound to localhost only.
+</div>
+{% endif %}
+
+<section class="card">
+  <h2>Google account</h2>
+  {% if google.state == 'unconfigured' %}
+    <p class="muted">
+      This app needs its own Google OAuth client — one you create, so your
+      calendar data never passes through anyone else's project.
+    </p>
+    <ol class="steps">
+      <li>Open <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener">Google Cloud Console → Credentials</a> and create a project.</li>
+      <li>Enable the <strong>Google Calendar API</strong> for it.</li>
+      <li>Configure the OAuth consent screen as <em>External</em>, and add your own address under <em>Test users</em>.</li>
+      <li>Create an OAuth client of type <strong>Web application</strong> with this authorised redirect URI:
+        <code class="block">{{ redirect_uri }}</code></li>
+      <li>Put the client ID and secret in your <code>.env</code> as
+        <code>GOOGLE_CLIENT_ID</code> / <code>GOOGLE_CLIENT_SECRET</code>, then restart.</li>
+    </ol>
+  {% elif google.state == 'disconnected' %}
+    <p>Not connected yet.</p>
+    <a class="button primary" href="/oauth/google/start">Connect Google account</a>
+  {% else %}
+    <p class="status-ok">Connected{% if google.email %} as <strong>{{ google.email }}</strong>{% endif %}.</p>
+    <form method="post" action="/google/disconnect" onsubmit="return confirm('Disconnect Google? Syncing stops; events already copied stay put.')">
+      <button class="danger">Disconnect</button>
+    </form>
+  {% endif %}
+</section>
+
+{% if google.state == 'connected' %}
+<section class="card">
+  <div class="card-head">
+    <h2>Calendars being imported</h2>
+    <div class="actions">
+      <a class="button" href="/sources/new">Add a calendar</a>
+      {% if sources %}
+      <form method="post" action="/sync"><button class="primary">Sync all now</button></form>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if not sources %}
+    <p class="muted">Nothing imported yet. Add your published Outlook calendar URL to get started.</p>
+  {% else %}
+  <table>
+    <thead>
+      <tr><th>Name</th><th>Into</th><th>Mode</th><th>Last run</th><th></th></tr>
+    </thead>
+    <tbody>
+    {% for item in sources %}
+      {% set s = item.row %}
+      <tr>
+        <td>
+          <strong>{{ s['name'] }}</strong>
+          {% if not s['enabled'] %}<span class="badge off">paused</span>{% endif %}
+          <div class="muted small">{{ s['past_days'] }} days back → {{ s['future_days'] }} days ahead</div>
+        </td>
+        <td>{{ calendar_names.get(s['target_calendar_id'], s['target_calendar_id']) }}</td>
+        <td>{% if s['privacy'] == 'busy' %}busy blocks{% else %}full details{% endif %}</td>
+        <td>
+          {% set run = item.last_run %}
+          {% if run %}
+            <a href="/runs/{{ run['id'] }}" class="badge {{ run['status'] }}">{{ run['status'] }}</a>
+            <div class="muted small">{{ run['message'] or '—' }}</div>
+          {% else %}
+            <span class="muted">never</span>
+          {% endif %}
+        </td>
+        <td class="row-actions">
+          <form method="post" action="/sources/{{ s['id'] }}/sync"><button>Sync</button></form>
+          <a class="button" href="/sources/{{ s['id'] }}/edit">Edit</a>
+          <form method="post" action="/sources/{{ s['id'] }}/delete" onsubmit="return confirm('Stop importing “{{ s['name'] }}”?')">
+            <button class="danger">Remove</button>
+          </form>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2>Schedule</h2>
+  <form method="post" action="/settings" class="inline">
+    <label for="interval">Sync every</label>
+    <input type="number" id="interval" name="sync_interval_minutes" min="5" max="1440" value="{{ interval }}">
+    <span>minutes</span>
+    <button class="primary">Save</button>
+  </form>
+  {% if next_run %}<p class="muted small">Next automatic run: {{ next_run.strftime('%Y-%m-%d %H:%M %Z') }}</p>{% endif %}
+</section>
+
+<section class="card">
+  <h2>Recent runs</h2>
+  {% if not runs %}
+    <p class="muted">No runs yet.</p>
+  {% else %}
+  <table>
+    <thead><tr><th>When</th><th>Calendar</th><th>Result</th><th>Changes</th></tr></thead>
+    <tbody>
+    {% for run in runs %}
+      <tr>
+        <td><a href="/runs/{{ run['id'] }}">{{ run['started_at'][:16].replace('T', ' ') }}</a></td>
+        <td>{{ run['source_name'] or '—' }}</td>
+        <td><span class="badge {{ run['status'] }}">{{ run['status'] }}</span> <span class="muted small">{{ run['message'] }}</span></td>
+        <td class="nums">+{{ run['created'] }} ~{{ run['updated'] }} −{{ run['deleted'] }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</section>
+{% endif %}
+{% endblock %}

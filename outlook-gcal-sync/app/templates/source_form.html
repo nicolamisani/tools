@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% block title %}{% if source %}Edit calendar{% else %}Add a calendar{% endif %}{% endblock %}
+{% block content %}
+<section class="card">
+  <h1>{% if source %}Edit “{{ source['name'] }}”{% else %}Add an Outlook calendar{% endif %}</h1>
+
+  {% if not source %}
+  <details class="help">
+    <summary>Where do I find the Outlook ICS link?</summary>
+    <ol class="steps">
+      <li>In Outlook on the web, open <strong>Settings → Calendar → Shared calendars</strong>.</li>
+      <li>Under <em>Publish a calendar</em>, pick the calendar and choose
+          <strong>Can view all details</strong> (or <em>Can view when I'm busy</em>
+          if you only want busy blocks).</li>
+      <li>Click <strong>Publish</strong> and copy the <strong>ICS</strong> link — not the HTML one.</li>
+    </ol>
+    <p class="muted small">
+      That link is a secret: anyone holding it can read the calendar. If your
+      workplace has disabled publishing, the option will be greyed out — the
+      alternative is an admin-registered Microsoft Graph app, which this
+      version does not support.
+    </p>
+  </details>
+  {% endif %}
+
+  <form method="post" action="{% if source %}/sources/{{ source['id'] }}{% else %}/sources{% endif %}">
+    <label for="name">Name</label>
+    <input id="name" name="name" required placeholder="Work calendar"
+           value="{{ source['name'] if source else '' }}">
+
+    <label for="ics_url">Published ICS URL</label>
+    <input id="ics_url" name="ics_url" required
+           placeholder="https://outlook.office365.com/owa/calendar/…/calendar.ics"
+           value="{{ source['ics_url'] if source else '' }}">
+    <div class="inline">
+      <button type="button" class="secondary" id="test-btn">Test this link</button>
+      <span id="test-result" class="muted small"></span>
+    </div>
+
+    <label for="target_calendar_id">Import into</label>
+    <select id="target_calendar_id" name="target_calendar_id">
+      <option value="__new__">➕ Create a new Google calendar…</option>
+      {% for cal in calendars %}
+        {% if cal.get('accessRole') in ('owner', 'writer') %}
+        <option value="{{ cal['id'] }}"
+          {% if source and source['target_calendar_id'] == cal['id'] %}selected{% endif %}>
+          {{ cal.get('summary', cal['id']) }}{% if cal.get('primary') %} (primary){% endif %}
+        </option>
+        {% endif %}
+      {% endfor %}
+    </select>
+    <div id="new-cal-row">
+      <label for="new_calendar_name">New calendar name</label>
+      <input id="new_calendar_name" name="new_calendar_name" placeholder="Outlook">
+      <p class="muted small">
+        A dedicated calendar keeps this app away from your existing Google events —
+        it only ever touches events it created itself.
+      </p>
+    </div>
+
+    <label for="privacy">Detail level</label>
+    <select id="privacy" name="privacy">
+      <option value="full" {% if not source or source['privacy'] == 'full' %}selected{% endif %}>
+        Full details — title, description, location
+      </option>
+      <option value="busy" {% if source and source['privacy'] == 'busy' %}selected{% endif %}>
+        Busy blocks only — no titles or details
+      </option>
+    </select>
+
+    <div class="grid-2">
+      <div>
+        <label for="past_days">Days of history</label>
+        <input type="number" id="past_days" name="past_days" min="0" max="3650"
+               value="{{ source['past_days'] if source else 30 }}">
+      </div>
+      <div>
+        <label for="future_days">Days ahead</label>
+        <input type="number" id="future_days" name="future_days" min="1" max="3650"
+               value="{{ source['future_days'] if source else 365 }}">
+      </div>
+    </div>
+
+    <label class="check">
+      <input type="checkbox" name="enabled" value="1"
+             {% if not source or source['enabled'] %}checked{% endif %}>
+      Sync this calendar automatically
+    </label>
+    <label class="check">
+      <input type="checkbox" name="reminders" value="1"
+             {% if source and source['reminders'] %}checked{% endif %}>
+      Let Google add its default notifications
+      <span class="muted small">(off means imported events never notify you twice)</span>
+    </label>
+
+    <div class="actions">
+      <button class="primary" type="submit">{% if source %}Save changes{% else %}Add and sync{% endif %}</button>
+      <a class="button" href="/">Cancel</a>
+    </div>
+  </form>
+</section>
+
+<script>
+  const select = document.getElementById('target_calendar_id');
+  const newRow = document.getElementById('new-cal-row');
+  const toggleNewRow = () => {
+    newRow.style.display = select.value === '__new__' ? 'block' : 'none';
+  };
+  select.addEventListener('change', toggleNewRow);
+  toggleNewRow();
+
+  document.getElementById('test-btn').addEventListener('click', async () => {
+    const out = document.getElementById('test-result');
+    const url = document.getElementById('ics_url').value.trim();
+    if (!url) { out.textContent = 'Paste a URL first.'; return; }
+    out.textContent = 'Checking…';
+    try {
+      const body = new URLSearchParams({ics_url: url});
+      const res = await fetch('/preview', {method: 'POST', body});
+      const data = await res.json();
+      out.className = data.ok ? 'small status-ok' : 'small error';
+      out.textContent = data.ok
+        ? `Found ${data.events} events (${data.recurring} recurring, ${data.exceptions} exceptions), timezone ${data.timezone}.`
+        : data.error;
+    } catch (err) {
+      out.className = 'small error';
+      out.textContent = 'Could not reach the app: ' + err;
+    }
+  });
+</script>
+{% endblock %}

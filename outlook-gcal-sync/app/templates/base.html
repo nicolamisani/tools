@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Outlook → Google Calendar{% endblock %}</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📅</text></svg>">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/">📅 Outlook&nbsp;→&nbsp;Google</a>
+    <nav>
+      {% if request.session.get('authenticated') %}
+      <form method="post" action="/logout"><button class="link">Sign out</button></form>
+      {% endif %}
+    </nav>
+  </header>
+
+  <main>
+    {% if flash %}
+    <div class="flash flash-{{ flash.level }}">{{ flash.message }}</div>
+    {% endif %}
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer>
+    <span>One-way sync. Nothing is ever written back to Outlook.</span>
+  </footer>
+</body>
+</html>

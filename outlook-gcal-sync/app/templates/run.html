@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Run {{ run['id'] }}{% endblock %}
+{% block content %}
+<section class="card">
+  <h1>Run {{ run['id'] }} — {{ run['source_name'] or 'unknown calendar' }}</h1>
+  <p>
+    <span class="badge {{ run['status'] }}">{{ run['status'] }}</span>
+    {{ run['message'] }}
+  </p>
+  <p class="muted small">
+    Started {{ run['started_at'].replace('T', ' ') }}
+    {% if run['finished_at'] %}· finished {{ run['finished_at'].replace('T', ' ') }}{% endif %}
+    · +{{ run['created'] }} created, ~{{ run['updated'] }} updated, −{{ run['deleted'] }} removed
+  </p>
+
+  {% if entries %}
+  <pre class="log">{% for line in entries %}{{ line }}
+{% endfor %}</pre>
+  {% else %}
+  <p class="muted">No per-event changes were recorded for this run.</p>
+  {% endif %}
+
+  <a class="button" href="/">Back</a>
+</section>
+{% endblock %}
